@@ -25,7 +25,10 @@ public class MonolithIndex : ModuleRules
 			"SlateCore",
 			"BlueprintGraph",
 			"KismetCompiler",
-			"EditorSubsystem"
+			"EditorSubsystem",
+			"AnimationCore",
+			"Niagara",
+			"GameplayTags"
 		});
 	}
 }

@@ -2,11 +2,14 @@
 #include "MonolithConfigActions.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithSettings.h"
 
 #define LOCTEXT_NAMESPACE "FMonolithConfigModule"
 
 void FMonolithConfigModule::StartupModule()
 {
+	if (!GetDefault<UMonolithSettings>()->bEnableConfig) return;
+
 	FMonolithConfigActions::RegisterActions(FMonolithToolRegistry::Get());
 	UE_LOG(LogMonolith, Log, TEXT("Monolith — Config module loaded (6 actions)"));
 }

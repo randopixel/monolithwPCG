@@ -410,14 +410,52 @@ FMonolithActionResult FMonolithAnimationActions::HandleRemoveBoneTrack(const TSh
 
 	IAnimationDataController& Controller = Seq->GetController();
 
+	// Null check skeleton for include_children
+	if (bIncludeChildren && !Seq->GetSkeleton())
+		return FMonolithActionResult::Error(TEXT("Skeleton is null — cannot resolve children"));
+
+	TArray<FName> BonesToRemove;
+	FName TargetBone(*BoneName);
+	BonesToRemove.Add(TargetBone);
+
+	if (bIncludeChildren && Seq->GetSkeleton())
+	{
+		const FReferenceSkeleton& RefSkel = Seq->GetSkeleton()->GetReferenceSkeleton();
+		int32 BoneIndex = RefSkel.FindBoneIndex(TargetBone);
+		if (BoneIndex != INDEX_NONE)
+		{
+			for (int32 i = 0; i < RefSkel.GetNum(); ++i)
+			{
+				int32 ParentIdx = i;
+				while (ParentIdx != INDEX_NONE)
+				{
+					if (ParentIdx == BoneIndex && i != BoneIndex)
+					{
+						BonesToRemove.Add(RefSkel.GetBoneName(i));
+						break;
+					}
+					ParentIdx = RefSkel.GetParentIndex(ParentIdx);
+				}
+			}
+		}
+	}
+
 	GEditor->BeginTransaction(FText::FromString(TEXT("Remove Bone Track")));
 	Seq->Modify();
-	Controller.RemoveBoneTracksMissingFromSkeleton(Seq->GetSkeleton());
+	int32 RemovedCount = 0;
+	for (const FName& Bone : BonesToRemove)
+	{
+		if (Controller.RemoveBoneTrack(Bone))
+		{
+			++RemovedCount;
+		}
+	}
 	GEditor->EndTransaction();
 
 	TSharedPtr<FJsonObject> Root = MakeShared<FJsonObject>();
 	Root->SetStringField(TEXT("bone_name"), BoneName);
 	Root->SetBoolField(TEXT("include_children"), bIncludeChildren);
+	Root->SetNumberField(TEXT("removed_count"), RemovedCount);
 	return FMonolithActionResult::Success(Root);
 }
 

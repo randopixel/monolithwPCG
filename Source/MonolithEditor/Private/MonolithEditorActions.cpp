@@ -170,6 +170,10 @@ void FMonolithEditorActions::RegisterActions(FMonolithLogCapture* LogCapture)
 		TEXT("Trigger a Live Coding compile"),
 		FMonolithActionHandler::CreateStatic(&HandleTriggerBuild));
 
+	Registry.RegisterAction(TEXT("editor"), TEXT("live_compile"),
+		TEXT("Trigger a Live Coding compile (alias for trigger_build). Params: wait (bool, optional) - block until compile finishes"),
+		FMonolithActionHandler::CreateStatic(&HandleTriggerBuild));
+
 	Registry.RegisterAction(TEXT("editor"), TEXT("get_build_errors"),
 		TEXT("Get build errors and warnings from the last compile"),
 		FMonolithActionHandler::CreateStatic(&HandleGetBuildErrors));

@@ -2,12 +2,15 @@
 #include "MonolithEditorActions.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithJsonUtils.h"
+#include "MonolithSettings.h"
 #include "Misc/OutputDeviceRedirector.h"
 
 #define LOCTEXT_NAMESPACE "FMonolithEditorModule"
 
 void FMonolithEditorModule::StartupModule()
 {
+	if (!GetDefault<UMonolithSettings>()->bEnableEditor) return;
+
 	LogCapture = new FMonolithLogCapture();
 	GLog->AddOutputDevice(LogCapture);
 

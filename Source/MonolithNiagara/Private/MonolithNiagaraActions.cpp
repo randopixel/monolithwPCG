@@ -711,6 +711,8 @@ FMonolithActionResult FMonolithNiagaraActions::HandleReorderEmitters(const TShar
 	GEditor->BeginTransaction(NSLOCTEXT("Monolith", "ReorderEm", "Reorder Emitters"));
 	System->Modify();
 	System->GetEmitterHandles() = MoveTemp(NewOrder);
+	System->PostEditChange();
+	System->MarkPackageDirty();
 	GEditor->EndTransaction();
 	System->RequestCompile(false);
 
@@ -1032,20 +1034,78 @@ FMonolithActionResult FMonolithNiagaraActions::HandleMoveModule(const TSharedPtr
 	if (CurIdx == NewIndex) return SuccessStr(TEXT("Already at target index"));
 
 	NewIndex = FMath::Clamp(NewIndex, 0, Mods.Num() - 1);
-	UNiagaraScript* ModScript = MN->FunctionScript;
-	if (!ModScript) return FMonolithActionResult::Error(TEXT("Module has no script"));
 
-	FGuid EmitterGuid;
-	int32 EIdx = FindEmitterHandleIndex(System, EmitterHandleId);
-	if (EIdx != INDEX_NONE) EmitterGuid = System->GetEmitterHandles()[EIdx].GetId();
+	// Helper: find the stack-flow input pin (PinCategoryMisc, EGPD_Input) on a node
+	auto FindStackFlowInputPin = [](UEdGraphNode* Node) -> UEdGraphPin*
+	{
+		for (UEdGraphPin* P : Node->Pins)
+		{
+			if (P->Direction == EGPD_Input && P->PinType.PinCategory == UEdGraphSchema_Niagara::PinCategoryMisc)
+			{
+				return P;
+			}
+		}
+		return nullptr;
+	};
+
+	// Helper: find the stack-flow output pin (PinCategoryMisc, EGPD_Output) on a node
+	auto FindStackFlowOutputPin = [](UEdGraphNode* Node) -> UEdGraphPin*
+	{
+		for (UEdGraphPin* P : Node->Pins)
+		{
+			if (P->Direction == EGPD_Output && P->PinType.PinCategory == UEdGraphSchema_Niagara::PinCategoryMisc)
+			{
+				return P;
+			}
+		}
+		return nullptr;
+	};
+
+	// Reorder the module list: remove from current position, insert at new position
+	Mods.RemoveAt(CurIdx);
+	Mods.Insert(MN, NewIndex);
 
 	GEditor->BeginTransaction(NSLOCTEXT("Monolith", "MoveMod", "Move Module"));
 	System->Modify();
-	MonolithNiagaraHelpers::RemoveModuleFromStack(*System, EmitterGuid, *MN);
-	UNiagaraNodeFunctionCall* NewNode = FNiagaraStackGraphUtilities::AddScriptModuleToStack(ModScript, *OutputNode, NewIndex);
+
+	// Break all existing stack-flow links on the output node and all modules
+	UEdGraphPin* OutputInputPin = FindStackFlowInputPin(OutputNode);
+	if (OutputInputPin)
+	{
+		OutputInputPin->BreakAllPinLinks();
+	}
+	for (UNiagaraNodeFunctionCall* Mod : Mods)
+	{
+		UEdGraphPin* ModFlowIn = FindStackFlowInputPin(Mod);
+		if (ModFlowIn) ModFlowIn->BreakAllPinLinks();
+		UEdGraphPin* ModFlowOut = FindStackFlowOutputPin(Mod);
+		if (ModFlowOut) ModFlowOut->BreakAllPinLinks();
+	}
+
+	// Rewire the chain in new order: OutputNode <- Mods[Last] <- ... <- Mods[0]
+	// The output node's input pin connects to the last module's output pin
+	if (OutputInputPin && Mods.Num() > 0)
+	{
+		UEdGraphPin* LastModOut = FindStackFlowOutputPin(Mods.Last());
+		if (LastModOut)
+		{
+			OutputInputPin->MakeLinkTo(LastModOut);
+		}
+
+		// Chain modules together: Mods[i] input <- Mods[i-1] output
+		for (int32 i = Mods.Num() - 1; i > 0; --i)
+		{
+			UEdGraphPin* CurIn = FindStackFlowInputPin(Mods[i]);
+			UEdGraphPin* PrevOut = FindStackFlowOutputPin(Mods[i - 1]);
+			if (CurIn && PrevOut)
+			{
+				CurIn->MakeLinkTo(PrevOut);
+			}
+		}
+	}
+
 	GEditor->EndTransaction();
 
-	if (!NewNode) return FMonolithActionResult::Error(TEXT("Failed to re-add module"));
 	System->RequestCompile(false);
 	return SuccessStr(TEXT("Module moved"));
 }

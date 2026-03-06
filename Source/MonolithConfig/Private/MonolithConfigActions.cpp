@@ -264,17 +264,33 @@ FMonolithActionResult FMonolithConfigActions::ExplainSetting(const TSharedPtr<FJ
 // Params: { "file": "Engine"|"Game"|..., "section": "/Script/..." (optional) }
 // ============================================================================
 
-/** Helper: parse an INI file into Section → { Key → Value } map */
-static void ParseIniFile(const FString& FilePath, TMap<FString, TMap<FString, FString>>& OutSections)
+/** Helper: collect entries from GConfig's public GetSection API (returns "Key=Value" pairs) */
+static TMap<FString, TArray<FString>> CollectEntriesFromGConfig(const FString& SectionName, const FString& ConfigFilename)
 {
-	FString FileContents;
-	if (!FFileHelper::LoadFileToString(FileContents, *FilePath))
+	TMap<FString, TArray<FString>> Result;
+	TArray<FString> Pairs;
+	if (GConfig->GetSection(*SectionName, Pairs, ConfigFilename))
 	{
-		return;
+		for (const FString& Pair : Pairs)
+		{
+			FString Key, Value;
+			if (Pair.Split(TEXT("="), &Key, &Value))
+			{
+				Key.TrimStartAndEndInline();
+				Value.TrimStartAndEndInline();
+				Result.FindOrAdd(Key).Add(Value);
+			}
+		}
 	}
+	return Result;
+}
 
+/** Helper: parse all sections from INI file text into a nested map */
+static TMap<FString, TMap<FString, TArray<FString>>> ParseIniTextSections(const FString& IniText)
+{
+	TMap<FString, TMap<FString, TArray<FString>>> AllSections;
 	TArray<FString> Lines;
-	FileContents.ParseIntoArrayLines(Lines);
+	IniText.ParseIntoArrayLines(Lines);
 
 	FString CurrentSection;
 	for (const FString& Line : Lines)
@@ -288,10 +304,8 @@ static void ParseIniFile(const FString& FilePath, TMap<FString, TMap<FString, FS
 		if (Trimmed.StartsWith(TEXT("[")) && Trimmed.Contains(TEXT("]")))
 		{
 			int32 EndBracket;
-			if (Trimmed.FindChar(']', EndBracket))
-			{
-				CurrentSection = Trimmed.Mid(1, EndBracket - 1);
-			}
+			Trimmed.FindChar(']', EndBracket);
+			CurrentSection = Trimmed.Mid(1, EndBracket - 1);
 			continue;
 		}
 
@@ -300,12 +314,65 @@ static void ParseIniFile(const FString& FilePath, TMap<FString, TMap<FString, FS
 			FString Key, Value;
 			if (Trimmed.Split(TEXT("="), &Key, &Value))
 			{
-				Key = Key.TrimStartAndEnd();
-				Value = Value.TrimStartAndEnd();
-				OutSections.FindOrAdd(CurrentSection).Add(Key, Value);
+				Key.TrimStartAndEndInline();
+				// Strip INI action prefixes (+, -, ., !)
+				if (Key.Len() > 0 && (Key[0] == '+' || Key[0] == '-' || Key[0] == '.' || Key[0] == '!'))
+				{
+					Key.RightChopInline(1);
+				}
+				Value.TrimStartAndEndInline();
+				AllSections.FindOrAdd(CurrentSection).FindOrAdd(Key).Add(Value);
 			}
 		}
 	}
+	return AllSections;
+}
+
+/** Helper: emit a single diff entry as JSON, handling scalar vs array values */
+static TSharedPtr<FJsonObject> MakeDiffEntry(
+	const FString& SectionName,
+	const FString& Key,
+	const FString& ChangeType,
+	const TArray<FString>& ResolvedValues,
+	const TArray<FString>* BaseValues)
+{
+	auto DiffJson = MakeShared<FJsonObject>();
+	DiffJson->SetStringField(TEXT("section"), SectionName);
+	DiffJson->SetStringField(TEXT("key"), Key);
+	DiffJson->SetStringField(TEXT("change_type"), ChangeType);
+
+	if (ResolvedValues.Num() == 1)
+	{
+		DiffJson->SetStringField(TEXT("project_value"), ResolvedValues[0]);
+	}
+	else
+	{
+		TArray<TSharedPtr<FJsonValue>> JsonValues;
+		for (const FString& V : ResolvedValues)
+		{
+			JsonValues.Add(MakeShared<FJsonValueString>(V));
+		}
+		DiffJson->SetArrayField(TEXT("project_values"), JsonValues);
+	}
+
+	if (BaseValues)
+	{
+		if (BaseValues->Num() == 1)
+		{
+			DiffJson->SetStringField(TEXT("engine_value"), (*BaseValues)[0]);
+		}
+		else
+		{
+			TArray<TSharedPtr<FJsonValue>> JsonValues;
+			for (const FString& V : *BaseValues)
+			{
+				JsonValues.Add(MakeShared<FJsonValueString>(V));
+			}
+			DiffJson->SetArrayField(TEXT("engine_values"), JsonValues);
+		}
+	}
+
+	return DiffJson;
 }
 
 FMonolithActionResult FMonolithConfigActions::DiffFromDefault(const TSharedPtr<FJsonObject>& Params)
@@ -323,67 +390,69 @@ FMonolithActionResult FMonolithConfigActions::DiffFromDefault(const TSharedPtr<F
 		Category = Category.Mid(4);
 	}
 
-	FString BaseFilePath = FPaths::Combine(FPaths::EngineConfigDir(), FString::Printf(TEXT("Base%s.ini"), *Category));
-	FString DefaultFilePath = FPaths::Combine(FPaths::ProjectConfigDir(), FString::Printf(TEXT("Default%s.ini"), *Category));
-
-	if (!FPaths::FileExists(DefaultFilePath))
+	// Get the fully-resolved config from GConfig (all layers merged: Base + Default + Platform + Saved)
+	FString ConfigFilename = GConfig->GetConfigFilename(*Category);
+	if (ConfigFilename.IsEmpty())
 	{
-		return FMonolithActionResult::Error(FString::Printf(TEXT("Could not find project config Default%s.ini"), *Category));
+		return FMonolithActionResult::Error(FString::Printf(TEXT("No config found for category '%s'"), *Category));
 	}
 
-	TMap<FString, TMap<FString, FString>> BaseSections;
-	TMap<FString, TMap<FString, FString>> ProjectSections;
+	// Load engine base config as text for comparison (avoids private FConfigFile API)
+	FString BaseConfigPath = FPaths::EngineConfigDir() / (TEXT("Base") + Category + TEXT(".ini"));
+	FString BaseConfigText;
+	FFileHelper::LoadFileToString(BaseConfigText, *BaseConfigPath);
+	auto BaseData = ParseIniTextSections(BaseConfigText);
 
-	ParseIniFile(BaseFilePath, BaseSections);
-	ParseIniFile(DefaultFilePath, ProjectSections);
+	// Iterate all sections in the resolved config and diff against engine base
+	TArray<FString> SectionNames;
+	GConfig->GetSectionNames(ConfigFilename, SectionNames);
 
 	TArray<TSharedPtr<FJsonValue>> DiffsArray;
 
-	for (const auto& SectionPair : ProjectSections)
+	for (const FString& SectionName : SectionNames)
 	{
-		const FString& SectionName = SectionPair.Key;
-
 		if (!FilterSection.IsEmpty() && SectionName != FilterSection)
 		{
 			continue;
 		}
 
-		const TMap<FString, FString>& ProjectEntries = SectionPair.Value;
-		const TMap<FString, FString>* BaseEntries = BaseSections.Find(SectionName);
+		// Get effective (resolved) entries from GConfig — includes all merged layers
+		auto ResolvedEntries = CollectEntriesFromGConfig(SectionName, ConfigFilename);
 
-		for (const auto& KeyValue : ProjectEntries)
+		// Get engine base entries from the parsed base config text
+		TMap<FString, TArray<FString>> BaseEntries;
+		if (const auto* BaseSectionPtr = BaseData.Find(SectionName))
 		{
-			FString BaseValue;
-			bool bExistsInBase = false;
+			BaseEntries = *BaseSectionPtr;
+		}
 
-			if (BaseEntries)
+		// Find keys that were added or modified by the project
+		for (const auto& Entry : ResolvedEntries)
+		{
+			const FString& Key = Entry.Key;
+			const TArray<FString>& ResolvedValues = Entry.Value;
+			const TArray<FString>* BaseValues = BaseEntries.Find(Key);
+
+			if (!BaseValues)
 			{
-				const FString* FoundBase = BaseEntries->Find(KeyValue.Key);
-				if (FoundBase)
-				{
-					BaseValue = *FoundBase;
-					bExistsInBase = true;
-				}
+				DiffsArray.Add(MakeShared<FJsonValueObject>(
+					MakeDiffEntry(SectionName, Key, TEXT("added"), ResolvedValues, nullptr)));
 			}
-
-			if (!bExistsInBase || BaseValue != KeyValue.Value)
+			else if (*BaseValues != ResolvedValues)
 			{
-				auto DiffJson = MakeShared<FJsonObject>();
-				DiffJson->SetStringField(TEXT("section"), SectionName);
-				DiffJson->SetStringField(TEXT("key"), KeyValue.Key);
-				DiffJson->SetStringField(TEXT("project_value"), KeyValue.Value);
+				DiffsArray.Add(MakeShared<FJsonValueObject>(
+					MakeDiffEntry(SectionName, Key, TEXT("modified"), ResolvedValues, BaseValues)));
+			}
+		}
 
-				if (bExistsInBase)
-				{
-					DiffJson->SetStringField(TEXT("engine_value"), BaseValue);
-					DiffJson->SetStringField(TEXT("change_type"), TEXT("modified"));
-				}
-				else
-				{
-					DiffJson->SetStringField(TEXT("change_type"), TEXT("added"));
-				}
-
-				DiffsArray.Add(MakeShared<FJsonValueObject>(DiffJson));
+		// Find keys that were removed by the project (present in base but not in resolved)
+		for (const auto& BaseEntry : BaseEntries)
+		{
+			if (!ResolvedEntries.Contains(BaseEntry.Key))
+			{
+				TArray<FString> EmptyValues;
+				DiffsArray.Add(MakeShared<FJsonValueObject>(
+					MakeDiffEntry(SectionName, BaseEntry.Key, TEXT("removed"), EmptyValues, &BaseEntry.Value)));
 			}
 		}
 	}

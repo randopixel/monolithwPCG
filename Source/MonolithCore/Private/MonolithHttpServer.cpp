@@ -102,8 +102,10 @@ void FMonolithHttpServer::Stop()
 
 bool FMonolithHttpServer::HandlePostMcp(const FHttpServerRequest& Request, const FHttpResultCallback& OnComplete)
 {
-	// Parse body as UTF-8 JSON
-	FString BodyString = FString(UTF8_TO_TCHAR(reinterpret_cast<const char*>(Request.Body.GetData())));
+	// Parse body as UTF-8 JSON (Body is NOT null-terminated — must add terminator)
+	TArray<uint8> NullTermBody(Request.Body);
+	NullTermBody.Add(0);
+	FString BodyString = FString(UTF8_TO_TCHAR(reinterpret_cast<const char*>(NullTermBody.GetData())));
 	if (BodyString.IsEmpty())
 	{
 		TSharedPtr<FJsonObject> Err = FMonolithJsonUtils::ErrorResponse(

@@ -241,8 +241,10 @@ UNiagaraSystem* FMonolithNiagaraActions::LoadSystem(const FString& SystemPath)
 
 int32 FMonolithNiagaraActions::FindEmitterHandleIndex(UNiagaraSystem* System, const FString& HandleIdOrName)
 {
-	if (!System) return INDEX_NONE;
+	if (!System || HandleIdOrName.IsEmpty()) return INDEX_NONE;
 	const TArray<FNiagaraEmitterHandle>& Handles = System->GetEmitterHandles();
+
+	// Try GUID match first
 	FGuid TestGuid;
 	if (FGuid::Parse(HandleIdOrName, TestGuid))
 	{
@@ -251,11 +253,29 @@ int32 FMonolithNiagaraActions::FindEmitterHandleIndex(UNiagaraSystem* System, co
 			if (Handles[i].GetId() == TestGuid) return i;
 		}
 	}
+
+	// Exact FName match
 	FName TestName(*HandleIdOrName);
 	for (int32 i = 0; i < Handles.Num(); ++i)
 	{
 		if (Handles[i].GetName() == TestName) return i;
 	}
+
+	// Case-insensitive name match
+	for (int32 i = 0; i < Handles.Num(); ++i)
+	{
+		if (Handles[i].GetName().ToString().Equals(HandleIdOrName, ESearchCase::IgnoreCase)) return i;
+	}
+
+	// Unique instance name match (can differ from handle display name)
+	for (int32 i = 0; i < Handles.Num(); ++i)
+	{
+		if (Handles[i].GetUniqueInstanceName().Equals(HandleIdOrName, ESearchCase::IgnoreCase)) return i;
+	}
+
+	// If only one emitter exists and caller didn't specify, return it
+	if (Handles.Num() == 1) return 0;
+
 	return INDEX_NONE;
 }
 
@@ -274,24 +294,26 @@ ENiagaraScriptUsage FMonolithNiagaraActions::ResolveScriptUsage(const FString& U
 UNiagaraGraph* FMonolithNiagaraActions::GetGraphForUsage(UNiagaraSystem* System, const FString& EmitterHandleId, ENiagaraScriptUsage Usage)
 {
 	if (!System) return nullptr;
-	UNiagaraScript* Script = nullptr;
+
 	if (Usage == ENiagaraScriptUsage::SystemSpawnScript || Usage == ENiagaraScriptUsage::SystemUpdateScript)
 	{
-		Script = System->GetSystemSpawnScript();
-		if (!Script && Usage == ENiagaraScriptUsage::SystemUpdateScript)
-			Script = System->GetSystemUpdateScript();
+		// System spawn and update share a single graph — accessed via the system spawn script
+		UNiagaraScript* Script = System->GetSystemSpawnScript();
+		if (!Script) return nullptr;
+		UNiagaraScriptSource* Src = Cast<UNiagaraScriptSource>(Script->GetLatestSource());
+		return Src ? Src->NodeGraph : nullptr;
 	}
 	else
 	{
+		// Emitter scripts (emitter spawn/update, particle spawn/update) share a single graph
+		// accessed via ED->GraphSource — NOT via individual GetScript() calls
 		int32 Idx = FindEmitterHandleIndex(System, EmitterHandleId);
 		if (Idx == INDEX_NONE) return nullptr;
 		FVersionedNiagaraEmitterData* ED = System->GetEmitterHandles()[Idx].GetEmitterData();
 		if (!ED) return nullptr;
-		Script = ED->GetScript(Usage, FGuid());
+		UNiagaraScriptSource* Src = Cast<UNiagaraScriptSource>(ED->GraphSource);
+		return Src ? Src->NodeGraph : nullptr;
 	}
-	if (!Script) return nullptr;
-	UNiagaraScriptSource* Src = Cast<UNiagaraScriptSource>(Script->GetLatestSource());
-	return Src ? Src->NodeGraph : nullptr;
 }
 
 UNiagaraNodeOutput* FMonolithNiagaraActions::FindOutputNode(UNiagaraSystem* System, const FString& EmitterHandleId, ENiagaraScriptUsage Usage)

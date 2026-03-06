@@ -118,6 +118,12 @@ void UMonolithUpdateSubsystem::Deinitialize()
 		UpdateCheckTickerHandle.Reset();
 	}
 
+	if (PreExitHandle.IsValid())
+	{
+		FCoreDelegates::OnPreExit.Remove(PreExitHandle);
+		PreExitHandle.Reset();
+	}
+
 	Super::Deinitialize();
 }
 
@@ -131,9 +137,13 @@ void UMonolithUpdateSubsystem::CheckForUpdate()
 	Request->SetHeader(TEXT("User-Agent"), TEXT("Monolith-UE-Plugin"));
 	Request->SetHeader(TEXT("Accept"), TEXT("application/vnd.github.v3+json"));
 
+	TWeakObjectPtr<UMonolithUpdateSubsystem> WeakSelf(this);
 	Request->OnProcessRequestComplete().BindLambda(
-		[this](FHttpRequestPtr HttpRequest, FHttpResponsePtr HttpResponse, bool bConnectedSuccessfully)
+		[WeakSelf](FHttpRequestPtr HttpRequest, FHttpResponsePtr HttpResponse, bool bConnectedSuccessfully)
 		{
+			UMonolithUpdateSubsystem* Self = WeakSelf.Get();
+			if (!Self) return;
+
 			if (!bConnectedSuccessfully || !HttpResponse.IsValid())
 			{
 				UE_LOG(LogMonolith, Warning, TEXT("Failed to reach GitHub API for update check"));
@@ -161,7 +171,7 @@ void UMonolithUpdateSubsystem::CheckForUpdate()
 			}
 
 			FString RemoteVersion = ParseVersionFromTag(TagName);
-			FString CurrentVersion = VersionInfo.Current;
+			FString CurrentVersion = Self->VersionInfo.Current;
 
 			UE_LOG(LogMonolith, Log, TEXT("Current: %s, Latest: %s"), *CurrentVersion, *RemoteVersion);
 
@@ -196,7 +206,7 @@ void UMonolithUpdateSubsystem::CheckForUpdate()
 
 				if (!ZipUrl.IsEmpty())
 				{
-					ShowUpdateNotification(RemoteVersion, ZipUrl);
+					Self->ShowUpdateNotification(RemoteVersion, ZipUrl);
 				}
 				else
 				{
@@ -262,11 +272,15 @@ void UMonolithUpdateSubsystem::ShowUpdateNotification(const FString& NewVersion,
 	// "Update" hyperlink
 	FString CapturedUrl = ZipUrl;
 	FString CapturedVersion = NewVersion;
+	TWeakObjectPtr<UMonolithUpdateSubsystem> WeakSelf(this);
 	Info.HyperlinkText = NSLOCTEXT("Monolith", "UpdateHyperlink", "Install Update");
 	Info.Hyperlink = FSimpleDelegate::CreateLambda(
-		[this, CapturedUrl, CapturedVersion]()
+		[WeakSelf, CapturedUrl, CapturedVersion]()
 		{
-			DownloadUpdate(CapturedUrl, CapturedVersion);
+			if (UMonolithUpdateSubsystem* Self = WeakSelf.Get())
+			{
+				Self->DownloadUpdate(CapturedUrl, CapturedVersion);
+			}
 		}
 	);
 
@@ -292,18 +306,22 @@ void UMonolithUpdateSubsystem::DownloadUpdate(const FString& ZipUrl, const FStri
 	Request->SetHeader(TEXT("User-Agent"), TEXT("Monolith-UE-Plugin"));
 
 	FString CapturedVersion = Version;
+	TWeakObjectPtr<UMonolithUpdateSubsystem> WeakSelf(this);
 	Request->OnProcessRequestComplete().BindLambda(
-		[this, CapturedVersion](FHttpRequestPtr HttpRequest, FHttpResponsePtr HttpResponse, bool bConnectedSuccessfully)
+		[WeakSelf, CapturedVersion](FHttpRequestPtr HttpRequest, FHttpResponsePtr HttpResponse, bool bConnectedSuccessfully)
 		{
+			UMonolithUpdateSubsystem* Self = WeakSelf.Get();
+			if (!Self) return;
+
 			if (!bConnectedSuccessfully || !HttpResponse.IsValid() || HttpResponse->GetResponseCode() != 200)
 			{
 				UE_LOG(LogMonolith, Error, TEXT("Failed to download update (HTTP %d)"),
 					HttpResponse.IsValid() ? HttpResponse->GetResponseCode() : 0);
-				bUpdateInProgress = false;
+				Self->bUpdateInProgress = false;
 				return;
 			}
 
-			OnDownloadComplete(CapturedVersion, true, HttpResponse->GetContent());
+			Self->OnDownloadComplete(CapturedVersion, true, HttpResponse->GetContent());
 		}
 	);
 
@@ -361,11 +379,15 @@ void UMonolithUpdateSubsystem::OnDownloadComplete(const FString& Version, bool b
 
 	bUpdateInProgress = false;
 
-	UE_LOG(LogMonolith, Log, TEXT("Monolith %s staged. Restart the editor to apply."), *Version);
+	UE_LOG(LogMonolith, Log, TEXT("Monolith %s staged for hot-swap on editor exit."), *Version);
+
+	// Register the pre-exit swap so the update applies when the editor closes
+	PendingStagingDir = StagingDir;
+	RegisterPreExitSwap();
 
 	// Notify user
 	FNotificationInfo Info(FText::Format(
-		NSLOCTEXT("Monolith", "UpdateStaged", "Monolith {0} staged. Restart the editor to apply."),
+		NSLOCTEXT("Monolith", "UpdateStaged", "Monolith {0} will be installed when you close the editor."),
 		FText::FromString(Version)
 	));
 	Info.ExpireDuration = 10.0f;
@@ -467,17 +489,6 @@ void UMonolithUpdateSubsystem::ApplyStagedUpdate()
 		return;
 	}
 
-	UE_LOG(LogMonolith, Log, TEXT("Applying staged Monolith update %s..."), *VersionInfo.Pending);
-
-	FString PluginDir = GetPluginPath();
-	FString BackupDir = PluginDir + TEXT("_Backup");
-
-	// Remove old backup if it exists
-	if (PlatformFile.DirectoryExists(*BackupDir))
-	{
-		PlatformFile.DeleteDirectoryRecursively(*BackupDir);
-	}
-
 	// The staging dir may contain a nested folder from the zip.
 	// Find the actual content root (look for Monolith.uplugin).
 	FString ContentRoot = StagingDir;
@@ -488,16 +499,48 @@ void UMonolithUpdateSubsystem::ApplyStagedUpdate()
 		ContentRoot = FPaths::GetPath(FoundFiles[0]);
 	}
 
-	// We can't swap our own plugin directory while the module is loaded.
-	// Log instructions for the user — the actual swap happens via a helper script or manually.
-	UE_LOG(LogMonolith, Warning,
-		TEXT("Monolith staged update ready at: %s"),
-		*ContentRoot
-	);
-	UE_LOG(LogMonolith, Warning,
-		TEXT("To complete the update: close the editor, replace Plugins/Monolith/ with the staged content, then reopen."));
+	PendingStagingDir = ContentRoot;
+	RegisterPreExitSwap();
 
-	// Update version info
+	UE_LOG(LogMonolith, Log, TEXT("Monolith %s will be installed when you close the editor."), *VersionInfo.Pending);
+
+	FNotificationInfo Info(FText::Format(
+		NSLOCTEXT("Monolith", "UpdatePending", "Monolith {0} will be installed when you close the editor."),
+		FText::FromString(VersionInfo.Pending)
+	));
+	Info.ExpireDuration = 10.0f;
+	Info.bUseThrobber = false;
+	FSlateNotificationManager::Get().AddNotification(Info);
+}
+
+void UMonolithUpdateSubsystem::RegisterPreExitSwap()
+{
+	if (PreExitHandle.IsValid())
+	{
+		return; // Already registered
+	}
+
+	PreExitHandle = FCoreDelegates::OnPreExit.AddUObject(this, &UMonolithUpdateSubsystem::OnPreExit);
+	UE_LOG(LogMonolith, Log, TEXT("Pre-exit swap registered — update will apply on editor close"));
+}
+
+void UMonolithUpdateSubsystem::OnPreExit()
+{
+	if (PendingStagingDir.IsEmpty())
+	{
+		return;
+	}
+
+	FString PluginDir = FPaths::ConvertRelativePathToFull(GetPluginPath());
+	FString StagingDir = FPaths::ConvertRelativePathToFull(PendingStagingDir);
+
+	if (!WriteSwapScript(StagingDir, PluginDir))
+	{
+		UE_LOG(LogMonolith, Error, TEXT("Failed to write swap script — update will not be applied"));
+		return;
+	}
+
+	// Update version.json: current = pending, clear staging
 	if (!VersionInfo.Pending.IsEmpty())
 	{
 		VersionInfo.Current = VersionInfo.Pending;
@@ -505,6 +548,138 @@ void UMonolithUpdateSubsystem::ApplyStagedUpdate()
 	VersionInfo.Pending.Empty();
 	VersionInfo.bStaging = false;
 	VersionInfo.SaveToDisk();
+
+	// Launch the swap script detached so it survives editor shutdown
+	FString ScriptPath;
+	FString ScriptDir = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Monolith"));
+#if PLATFORM_WINDOWS
+	ScriptPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(ScriptDir, TEXT("monolith_swap.bat")));
+	ScriptPath.ReplaceInline(TEXT("/"), TEXT("\\"));
+
+	FString Args = FString::Printf(TEXT("/c \"%s\""), *ScriptPath);
+	uint32 ProcessId = 0;
+	FProcHandle Proc = FPlatformProcess::CreateProc(
+		TEXT("cmd.exe"), *Args,
+		true,  // bLaunchDetached
+		true,  // bLaunchHidden
+		false, // bLaunchReallyHidden
+		&ProcessId,
+		0,     // PriorityModifier
+		nullptr, nullptr
+	);
+#elif PLATFORM_MAC || PLATFORM_LINUX
+	ScriptPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(ScriptDir, TEXT("monolith_swap.sh")));
+
+	FString Args = FString::Printf(TEXT("\"%s\""), *ScriptPath);
+	uint32 ProcessId = 0;
+	FProcHandle Proc = FPlatformProcess::CreateProc(
+		TEXT("/bin/bash"), *Args,
+		true,  // bLaunchDetached
+		false, // bLaunchHidden
+		false, // bLaunchReallyHidden
+		&ProcessId,
+		0,     // PriorityModifier
+		nullptr, nullptr
+	);
+#endif
+
+	if (Proc.IsValid())
+	{
+		UE_LOG(LogMonolith, Log, TEXT("Monolith update will be applied after editor closes (PID %u)."), ProcessId);
+		FPlatformProcess::CloseProc(Proc);
+	}
+	else
+	{
+		UE_LOG(LogMonolith, Error, TEXT("Failed to launch swap script at %s"), *ScriptPath);
+	}
+}
+
+bool UMonolithUpdateSubsystem::WriteSwapScript(const FString& StagingDir, const FString& PluginDir)
+{
+	FString ScriptDir = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Monolith"));
+	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+	if (!PlatformFile.DirectoryExists(*ScriptDir))
+	{
+		PlatformFile.CreateDirectoryTree(*ScriptDir);
+	}
+
+	FString ScriptContent;
+	FString ScriptPath;
+
+#if PLATFORM_WINDOWS
+	FString WinPluginDir = PluginDir;
+	FString WinStagingDir = StagingDir;
+	FString WinBackupDir = PluginDir + TEXT("_Backup");
+	WinPluginDir.ReplaceInline(TEXT("/"), TEXT("\\"));
+	WinStagingDir.ReplaceInline(TEXT("/"), TEXT("\\"));
+	WinBackupDir.ReplaceInline(TEXT("/"), TEXT("\\"));
+
+	// Get just the parent dir and folder name for the ren command
+	FString PluginParent = FPaths::GetPath(WinPluginDir);
+	FString PluginFolderName = FPaths::GetCleanFilename(WinPluginDir);
+	FString BackupFolderName = PluginFolderName + TEXT("_Backup");
+
+	ScriptContent = FString::Printf(
+		TEXT("@echo off\r\n")
+		TEXT("timeout /t 3 /nobreak > nul\r\n")
+		TEXT("if exist \"%s\" rmdir /s /q \"%s\"\r\n")
+		TEXT("cd /d \"%s\"\r\n")
+		TEXT("ren \"%s\" \"%s\"\r\n")
+		TEXT("if errorlevel 1 (timeout /t 5 /nobreak > nul & ren \"%s\" \"%s\")\r\n")
+		TEXT("xcopy /s /e /i /q \"%s\\*\" \"%s\\\"\r\n")
+		TEXT("if errorlevel 1 (ren \"%s\" \"%s\" & echo FAILED & pause & exit /b 1)\r\n")
+		TEXT("rmdir /s /q \"%s\"\r\n")
+		TEXT("rmdir /s /q \"%s\"\r\n")
+		TEXT("echo Monolith updated successfully.\r\n"),
+		*WinBackupDir, *WinBackupDir,
+		*PluginParent,
+		*PluginFolderName, *BackupFolderName,
+		*PluginFolderName, *BackupFolderName,
+		*WinStagingDir, *WinPluginDir,
+		*BackupFolderName, *PluginFolderName,
+		*WinBackupDir,
+		*WinStagingDir
+	);
+
+	ScriptPath = FPaths::Combine(ScriptDir, TEXT("monolith_swap.bat"));
+#elif PLATFORM_MAC || PLATFORM_LINUX
+	FString BackupDir = PluginDir + TEXT("_Backup");
+
+	ScriptContent = FString::Printf(
+		TEXT("#!/bin/bash\n")
+		TEXT("sleep 3\n")
+		TEXT("rm -rf \"%s\"\n")
+		TEXT("mv \"%s\" \"%s\" || { sleep 5; mv \"%s\" \"%s\"; }\n")
+		TEXT("cp -r \"%s/.\" \"%s/\"\n")
+		TEXT("if [ $? -ne 0 ]; then mv \"%s\" \"%s\"; echo 'FAILED'; exit 1; fi\n")
+		TEXT("rm -rf \"%s\" \"%s\"\n")
+		TEXT("echo 'Monolith updated successfully.'\n"),
+		*BackupDir,
+		*PluginDir, *BackupDir, *PluginDir, *BackupDir,
+		*StagingDir, *PluginDir,
+		*BackupDir, *PluginDir,
+		*BackupDir, *StagingDir
+	);
+
+	ScriptPath = FPaths::Combine(ScriptDir, TEXT("monolith_swap.sh"));
+#else
+	UE_LOG(LogMonolith, Error, TEXT("Swap script generation not supported on this platform"));
+	return false;
+#endif
+
+	if (!FFileHelper::SaveStringToFile(ScriptContent, *ScriptPath))
+	{
+		UE_LOG(LogMonolith, Error, TEXT("Failed to write swap script to %s"), *ScriptPath);
+		return false;
+	}
+
+#if PLATFORM_MAC || PLATFORM_LINUX
+	// Make the script executable
+	FPlatformProcess::ExecProcess(TEXT("/bin/chmod"), *FString::Printf(TEXT("+x \"%s\""), *ScriptPath), nullptr, nullptr, nullptr);
+#endif
+
+	UE_LOG(LogMonolith, Log, TEXT("Swap script written to %s"), *ScriptPath);
+	return true;
 }
 
 FString UMonolithUpdateSubsystem::GetStagingPath()

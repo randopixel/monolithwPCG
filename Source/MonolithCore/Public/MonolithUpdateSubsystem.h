@@ -4,6 +4,7 @@
 #include "EditorSubsystem.h"
 #include "Dom/JsonObject.h"
 #include "Containers/Ticker.h"
+#include "Misc/CoreDelegates.h"
 #include "MonolithUpdateSubsystem.generated.h"
 
 struct FMonolithVersionInfo
@@ -35,7 +36,7 @@ public:
 	/** Get the current version info. */
 	const FMonolithVersionInfo& GetVersionInfo() const { return VersionInfo; }
 
-	/** Apply a staged update (swap directories). Called on startup if staging detected. */
+	/** Register a pre-exit hook to swap the staged update when the editor closes. */
 	void ApplyStagedUpdate();
 
 	// --- Version Helpers ---
@@ -47,7 +48,18 @@ public:
 	static int32 CompareVersions(const FString& Current, const FString& Remote);
 
 private:
+	/** Bind to FCoreDelegates::OnPreExit so we can swap files after the editor shuts down. */
+	void RegisterPreExitSwap();
+
+	/** Called by FCoreDelegates::OnPreExit — writes swap script, updates version.json, launches script. */
+	void OnPreExit();
+
+	/** Generate a platform-specific swap script that replaces the plugin directory. Returns true on success. */
+	bool WriteSwapScript(const FString& StagingDir, const FString& PluginDir);
+
 	FMonolithVersionInfo VersionInfo;
+	FDelegateHandle PreExitHandle;
+	FString PendingStagingDir;
 
 	/** Show an editor notification with an Update button. */
 	void ShowUpdateNotification(const FString& NewVersion, const FString& ZipUrl);

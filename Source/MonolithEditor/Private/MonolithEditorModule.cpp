@@ -1,8 +1,10 @@
 #include "MonolithEditorModule.h"
 #include "MonolithEditorActions.h"
+#include "MonolithSettingsCustomization.h"
 #include "MonolithToolRegistry.h"
 #include "MonolithJsonUtils.h"
 #include "MonolithSettings.h"
+#include "PropertyEditorModule.h"
 #include "Misc/OutputDeviceRedirector.h"
 
 #define LOCTEXT_NAMESPACE "FMonolithEditorModule"
@@ -15,12 +17,26 @@ void FMonolithEditorModule::StartupModule()
 	GLog->AddOutputDevice(LogCapture);
 
 	FMonolithEditorActions::RegisterActions(LogCapture);
+
+	// Register settings detail customization
+	FPropertyEditorModule& PropModule = FModuleManager::LoadModuleChecked<FPropertyEditorModule>("PropertyEditor");
+	PropModule.RegisterCustomClassLayout(
+		UMonolithSettings::StaticClass()->GetFName(),
+		FOnGetDetailCustomizationInstance::CreateStatic(&FMonolithSettingsCustomization::MakeInstance)
+	);
+
 	UE_LOG(LogMonolith, Log, TEXT("Monolith — Editor module loaded (11 actions)"));
 }
 
 void FMonolithEditorModule::ShutdownModule()
 {
 	FMonolithToolRegistry::Get().UnregisterNamespace(TEXT("editor"));
+
+	if (FModuleManager::Get().IsModuleLoaded("PropertyEditor"))
+	{
+		FPropertyEditorModule& PropModule = FModuleManager::GetModuleChecked<FPropertyEditorModule>("PropertyEditor");
+		PropModule.UnregisterCustomClassLayout(UMonolithSettings::StaticClass()->GetFName());
+	}
 
 	if (LogCapture)
 	{

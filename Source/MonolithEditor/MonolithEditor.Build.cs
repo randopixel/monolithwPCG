@@ -16,7 +16,14 @@ public class MonolithEditor : ModuleRules
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
 			"MonolithCore",
+			"MonolithIndex",
+			"SQLiteCore",
+			"MonolithSource",
 			"UnrealEd",
+			"EditorSubsystem",
+			"PropertyEditor",
+			"Slate",
+			"SlateCore",
 			"Json",
 			"JsonUtilities",
 			"MessageLog"

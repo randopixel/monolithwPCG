@@ -38,10 +38,10 @@ Monolith.uplugin
   MonolithMaterial      — Material inspection + graph editing (14 actions)
   MonolithAnimation     — Animation sequences, montages, ABPs (23 actions)
   MonolithNiagara       — Niagara particle systems (39 actions)
-  MonolithEditor        — Build triggers, live compile, log capture, crash context (12 actions)
+  MonolithEditor        — Build triggers, live compile, log capture, compile output, crash context (13 actions)
   MonolithConfig        — Config/INI resolution and search (6 actions)
   MonolithIndex         — SQLite FTS5 deep project indexer (5 actions)
-  MonolithSource        — Engine source + API lookup (10-11 actions)
+  MonolithSource        — Engine source + API lookup (10 actions)
 ```
 
 ### Discovery/Dispatch Pattern
@@ -86,7 +86,7 @@ All domain modules register actions with `FMonolithToolRegistry` (central single
 | `FMonolithToolRegistry` | Central singleton action registry. `TMap<FString, FRegisteredAction>` keyed by "namespace.action". Thread-safe — releases lock before executing handlers |
 | `FMonolithJsonUtils` | Static JSON-RPC 2.0 helpers. Standard error codes (-32700 through -32603). Declares `LogMonolith` category |
 | `FMonolithAssetUtils` | Asset loading with 4-tier fallback: StaticLoadObject(resolved) -> PackageName.ObjectName -> FindObject+_C suffix -> ForEachObjectWithPackage |
-| `UMonolithSettings` | UDeveloperSettings (config=Monolith). ServerPort, bAutoUpdateEnabled, DatabasePathOverride, EngineSourceDBPathOverride, EngineSourcePath, 8 module enable toggles (functional — checked at registration time), LogVerbosity |
+| `UMonolithSettings` | UDeveloperSettings (config=Monolith). ServerPort, bAutoUpdateEnabled, DatabasePathOverride, EngineSourceDBPathOverride, EngineSourcePath, 8 module enable toggles (functional — checked at registration time), LogVerbosity. Settings UI customized via `FMonolithSettingsCustomization` (IDetailCustomization) with re-index buttons for project and source databases |
 | `UMonolithUpdateSubsystem` | UEditorSubsystem. GitHub Releases auto-updater. Downloads zip, cross-platform extraction (PowerShell on Windows, unzip on Mac/Linux). Hot-swap: stages update and applies on editor exit via FCoreDelegates::OnPreExit. version.json in Saved/Monolith/ |
 | `FMonolithCoreTools` | Registers 4 core actions |
 
@@ -332,11 +332,12 @@ All marked with "UE 5.7 FIX" comments:
 
 | Class | Responsibility |
 |-------|---------------|
-| `FMonolithEditorModule` | Creates FMonolithLogCapture, attaches to GLog, registers 12 actions |
+| `FMonolithEditorModule` | Creates FMonolithLogCapture, attaches to GLog, registers 13 actions |
 | `FMonolithLogCapture` | FOutputDevice subclass. Ring buffer (10,000 entries max). Thread-safe. Tracks counts by verbosity |
-| `FMonolithEditorActions` | Static handlers for build and log operations |
+| `FMonolithEditorActions` | Static handlers for build and log operations. Hooks into `ILiveCodingModule::GetOnPatchCompleteDelegate()` to capture compile results and timestamps |
+| `FMonolithSettingsCustomization` | IDetailCustomization for UMonolithSettings. Adds re-index buttons for project and source databases in Project Settings UI |
 
-#### Actions (12 — namespace: "editor")
+#### Actions (13 — namespace: "editor")
 
 | Action | Description |
 |--------|-------------|
@@ -351,6 +352,7 @@ All marked with "UE 5.7 FIX" comments:
 | `tail_log` | Last N lines formatted `[category][verbosity] message`. Default 50, max 500 |
 | `get_log_categories` | List all active log categories seen in ring buffer |
 | `get_log_stats` | Log stats: total, fatal, error, warning, log, verbose counts |
+| `get_compile_output` | Structured compile report: result, time, log lines from compile categories (LogLiveCoding, LogCompile, LogLinker), error/warning counts, patch status. Time-windowed to last compile |
 | `get_crash_context` | CrashContext.runtime-xml + Ensures.log + 20 recent errors. Truncated at 4096 chars |
 
 ---
@@ -497,14 +499,15 @@ All marked with "UE 5.7 FIX" comments:
 
 ---
 
-## 5. Skills (8 bundled)
+## 5. Skills (9 bundled)
 
 | Skill | Trigger Words | Entry Point | Actions |
 |-------|--------------|-------------|---------|
 | unreal-animation | animation, montage, ABP, blend space, notify | `animation.query()` | 23 |
 | unreal-blueprints | Blueprint, BP, event graph, node, variable | `blueprint.query()` | 5 |
+| unreal-build | build, compile, Live Coding, hot reload, rebuild | `editor.query()` | 13 |
 | unreal-cpp | C++, header, include, UCLASS, Build.cs, linker error | `source.query()` + `config.query()` | 10+6 |
-| unreal-debugging | build error, crash, log, debug, stack trace | `editor.query()` | 11 |
+| unreal-debugging | build error, crash, log, debug, stack trace | `editor.query()` | 13 |
 | unreal-materials | material, shader, PBR, texture, material graph | `material.query()` | 14 (skill claims 46) |
 | unreal-niagara | Niagara, particle, VFX, emitter | `niagara.query()` | 39 (skill claims 70) |
 | unreal-performance | performance, optimization, FPS, frame time | Cross-domain | config + material + niagara |
@@ -642,10 +645,10 @@ See `TODO.md` for the full list. Key architectural constraints:
 | MonolithMaterial | material | 14 |
 | MonolithAnimation | animation | 23 |
 | MonolithNiagara | niagara | 39 |
-| MonolithEditor | editor | 12 |
+| MonolithEditor | editor | 13 |
 | MonolithConfig | config | 6 |
 | MonolithIndex | project | 5 |
-| MonolithSource | source | 10-11 |
-| **Total** | | **118-119** |
+| MonolithSource | source | 10 |
+| **Total** | | **119** |
 
 **Note:** Skills claim higher counts (material: 46, animation: 62, niagara: 70) based on original Python server action counts. The C++ implementations consolidated and reduced action counts while maintaining equivalent functionality. README's "~231 tools" refers to the original fragmented setup.

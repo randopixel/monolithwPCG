@@ -146,7 +146,7 @@ cp -r Plugins/Monolith/Skills/* ~/.claude/skills/
 
 Monolith uses a **discovery/dispatch pattern**. Instead of registering 119 individual MCP tools (which would flood your AI's context window), each domain exposes a single `{namespace}.query(action, params)` tool. Call `monolith.discover()` to see what actions are available, then call the relevant namespace tool with the action name.
 
-This means your AI only sees ~14 tools instead of 118, reducing token overhead by ~95% while keeping every action accessible. The central `FMonolithToolRegistry` routes each request to the correct handler.
+This means your AI only sees ~14 tools instead of 119, reducing token overhead by ~95% while keeping every action accessible. The central `FMonolithToolRegistry` routes each request to the correct handler.
 
 ---
 
@@ -225,7 +225,7 @@ Plugin settings are at **Editor Preferences > Plugins > Monolith**:
 
 ## Skills
 
-Monolith bundles 8 Claude Code skills in `Skills/` for domain-specific workflows:
+Monolith bundles 9 Claude Code skills in `Skills/` for domain-specific workflows:
 
 | Skill | Description |
 |-------|-------------|

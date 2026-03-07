@@ -207,6 +207,7 @@ def test_action(namespace, action, params=None):
 | `tail_log` | UNTESTED | |
 | `get_log_categories` | UNTESTED | |
 | `get_log_stats` | UNTESTED | |
+| `get_compile_output` | UNTESTED | Added 2026-03-07. Returns structured compile report with time-windowed log lines from compile categories (LogLiveCoding, LogCompile, LogLinker), error/warning counts, patch status |
 | `get_crash_context` | UNTESTED | Requires crash files to exist |
 
 ### MonolithConfig (namespace: "config")
@@ -319,4 +320,7 @@ Before any release, verify:
 - [ ] `editor.live_compile` triggers Live Coding compile
 - [ ] Incremental index updates on asset add/remove/rename
 - [ ] Deep indexing produces data for Animation, Niagara, DataTable, Level assets
+- [ ] Settings UI re-index buttons appear in Editor Preferences > Plugins > Monolith
+- [ ] Live Coding OnPatchComplete delegate captures compile results (last_result, timestamps, patch_applied)
+- [ ] `editor.get_compile_output` returns time-windowed compile log lines with error/warning counts
 - [ ] No LogMonolith errors in editor log on clean startup

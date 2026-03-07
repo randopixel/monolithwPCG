@@ -53,7 +53,7 @@ None! All minor bugs resolved.
 - [x] SQLite FTS5 project indexer with 4 indexers (Blueprint, Material, Generic, Dependency)
 - [x] Python tree-sitter engine source indexer
 - [x] Auto-updater via GitHub Releases
-- [x] 8 Claude Code skills
+- [x] 9 Claude Code skills (including unreal-build)
 - [x] Templates (.mcp.json, CLAUDE.md)
 - [x] README, LICENSE, ATTRIBUTION
 - [x] HTTP body null-termination fix
@@ -97,7 +97,7 @@ None! All minor bugs resolved.
 - [x] Deep asset indexing — safe game-thread loading strategy implemented (2026-03-07)
 - [x] Incremental indexing — delta updates from file change detection (2026-03-07)
 - [x] Asset change detection — hooked into Asset Registry callbacks (2026-03-07)
-- [x] API reference page — auto-generated API_REFERENCE.md with 118 actions (2026-03-07)
+- [x] API reference page — auto-generated API_REFERENCE.md with 119 actions (2026-03-07)
 - [x] Contribution guide — CONTRIBUTING.md created (2026-03-07)
 - [x] Changelog — CHANGELOG.md created (2026-03-07)
 - [x] Clean up MCP/ package — removed abandoned CLI scaffold (2026-03-07)

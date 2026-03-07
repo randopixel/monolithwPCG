@@ -1,6 +1,6 @@
 # Monolith API Reference
 
-**Total Actions: 118** across 9 namespaces
+**Total Actions: 119** across 9 namespaces
 
 > Auto-generated from action registration code. Each action is called via HTTP POST to `http://localhost:<port>` with JSON body `{ "namespace": "<ns>", "action": "<action>", "params": { ... } }`.
 
@@ -15,7 +15,7 @@
 | [material](#material) | 14 | Material graph editing and inspection |
 | [animation](#animation) | 23 | Animation montages, blend spaces, state machines, skeletons |
 | [niagara](#niagara) | 39 | Niagara VFX system editing (emitters, modules, params, renderers) |
-| [editor](#editor) | 12 | Live Coding builds and editor log capture |
+| [editor](#editor) | 13 | Live Coding builds, compile output capture, and editor log capture |
 | [config](#config) | 6 | INI config file inspection and search |
 | [project](#project) | 5 | Project-wide asset index (SQLite + FTS5) |
 | [source](#source) | 10 | Unreal Engine C++ source code navigation |
@@ -1134,6 +1134,16 @@ List active log categories.
 Get log statistics by verbosity level.
 
 *No parameters.*
+
+---
+
+### `editor.get_compile_output`
+
+Get structured compile report: result, time, log lines from compile categories (LogLiveCoding, LogCompile, LogLinker), error/warning counts, patch status. Time-windowed to the last compile event via OnPatchComplete delegate.
+
+*No parameters.*
+
+**Returns:** `last_result`, `last_compile_time`, `last_compile_end_time`, `patch_applied`, `compiling`, `error_count`, `warning_count`, `log_line_count`, `compile_log` (array of log entries).
 
 ---
 

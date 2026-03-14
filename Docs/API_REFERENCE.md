@@ -1,6 +1,6 @@
 # Monolith API Reference
 
-**Total Actions: 177** across 9 namespaces
+**Total Actions: 218** across 9 namespaces
 
 > Auto-generated from action registration code. Each action is called via HTTP POST to `http://localhost:<port>` with JSON body `{ "namespace": "<ns>", "action": "<action>", "params": { ... } }`.
 
@@ -11,10 +11,10 @@
 | Namespace | Actions | Description |
 |-----------|---------|-------------|
 | [monolith](#monolith) | 4 | Core server tools (discover, status, update, reindex) |
-| [blueprint](#blueprint) | 6 | Blueprint graph introspection |
+| [blueprint](#blueprint) | 46 | Blueprint read/write, variable/component/graph CRUD, node operations, compile |
 | [material](#material) | 25 | Material graph editing, inspection, and CRUD |
-| [animation](#animation) | 67 | Animation curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch |
-| [niagara](#niagara) | 41 | Niagara VFX system editing (emitters, modules, params, renderers) |
+| [animation](#animation) | 62 | Animation curves, bone tracks, sync markers, root motion, compression, blend spaces, ABPs, montages, skeletons, PoseSearch |
+| [niagara](#niagara) | 47 | Niagara VFX system editing (emitters, modules, params, renderers, HLSL) |
 | [editor](#editor) | 13 | Live Coding builds, compile output capture, and editor log capture |
 | [config](#config) | 6 | INI config file inspection and search |
 | [project](#project) | 5 | Project-wide asset index (SQLite + FTS5) |
@@ -30,7 +30,7 @@ Core server management and introspection tools.
 
 List available tool namespaces and their actions. Pass namespace to filter.
 
-> **New in Wave 2:** `discover` now returns per-action param schemas for all 177 actions, so callers can see required/optional params without consulting docs.
+> `discover` returns per-action param schemas for all 218 actions. AI clients also receive these schemas in `tools/list` at session start, so full param documentation is available without calling `discover` first.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -46,7 +46,7 @@ Get Monolith server health: version, uptime, port, registered action count, modu
 
 ---
 
-### `monolith.update`
+### `monolith_update`
 
 Check for or install Monolith updates from GitHub Releases.
 
@@ -66,7 +66,7 @@ Trigger a full project re-index of the Monolith project database.
 
 ## blueprint
 
-Blueprint graph introspection -- read-only access to graphs, nodes, pins, variables, and execution flow.
+Full read/write access to Blueprint graphs, variables, components, functions, nodes, pins, and interfaces.
 
 ### `blueprint.list_graphs`
 
@@ -145,6 +145,530 @@ Search for nodes in a Blueprint by title or function name.
 
 ---
 
+### `blueprint.get_components`
+
+Get the component hierarchy of a Blueprint.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+
+**Returns:** Component tree with parent-child relationships, component class, and attach socket for each component.
+
+---
+
+### `blueprint.get_component_details`
+
+Get full property reflection for a single component.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `component_name` | string | **required** | Name of the component |
+
+**Returns:** All reflected properties for the component with their current values and metadata.
+
+---
+
+### `blueprint.get_functions`
+
+Get all functions defined in a Blueprint.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+
+**Returns:** Array of functions with name, signature (inputs/outputs), access level, and purity/const flags.
+
+---
+
+### `blueprint.get_event_dispatchers`
+
+Get all event dispatchers defined in a Blueprint.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+
+**Returns:** Array of event dispatchers with name and parameter signatures.
+
+---
+
+### `blueprint.get_parent_class`
+
+Get the parent class and Blueprint type information.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+
+**Returns:** Parent class name, Blueprint type (Normal/Interface/Macro/FunctionLibrary), and Blueprint status.
+
+---
+
+### `blueprint.get_interfaces`
+
+Get all interfaces implemented by a Blueprint.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+
+**Returns:** Array of implemented interface class names.
+
+---
+
+### `blueprint.get_construction_script`
+
+Get the construction script graph data for a Blueprint.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+
+**Returns:** Full graph data for the construction script graph (nodes, pins, connections).
+
+---
+
+### `blueprint.add_variable`
+
+Add a new variable to a Blueprint.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `name` | string | **required** | Variable name |
+| `type` | string | **required** | Variable type (e.g. `bool`, `int`, `float`, `FString`, `FVector`, `UObject`) |
+| `default_value` | string | optional | Default value as string |
+| `category` | string | optional | Category for editor organization |
+| `instance_editable` | bool | optional | Expose in Details panel. Default: `false` |
+| `blueprint_read_only` | bool | optional | Prevent Blueprint writes. Default: `false` |
+| `expose_on_spawn` | bool | optional | Expose as spawn parameter. Default: `false` |
+| `replicated` | bool | optional | Replicate across network. Default: `false` |
+| `transient` | bool | optional | Do not serialize. Default: `false` |
+| `save_game` | bool | optional | Include in SaveGame serialization. Default: `false` |
+
+---
+
+### `blueprint.remove_variable`
+
+Remove a variable from a Blueprint.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `name` | string | **required** | Name of the variable to remove |
+
+---
+
+### `blueprint.rename_variable`
+
+Rename a variable in a Blueprint.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `old_name` | string | **required** | Current variable name |
+| `new_name` | string | **required** | New variable name |
+
+---
+
+### `blueprint.set_variable_type`
+
+Change the type of an existing variable.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `name` | string | **required** | Variable name |
+| `type` | string | **required** | New variable type |
+
+---
+
+### `blueprint.set_variable_defaults`
+
+Set default value and metadata flags on an existing variable.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `name` | string | **required** | Variable name |
+| `default_value` | string | optional | Default value as string |
+| `category` | string | optional | Category for editor organization |
+| `instance_editable` | bool | optional | Expose in Details panel |
+| `blueprint_read_only` | bool | optional | Prevent Blueprint writes |
+| `expose_on_spawn` | bool | optional | Expose as spawn parameter |
+| `replicated` | bool | optional | Replicate across network |
+| `transient` | bool | optional | Do not serialize |
+| `save_game` | bool | optional | Include in SaveGame serialization |
+
+---
+
+### `blueprint.add_local_variable`
+
+Add a local variable scoped to a specific function.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `function_name` | string | **required** | Name of the function to add the local variable to |
+| `name` | string | **required** | Variable name |
+| `type` | string | **required** | Variable type |
+| `default_value` | string | optional | Default value as string |
+
+---
+
+### `blueprint.remove_local_variable`
+
+Remove a local variable from a specific function.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `function_name` | string | **required** | Name of the function containing the variable |
+| `name` | string | **required** | Name of the local variable to remove |
+
+---
+
+### `blueprint.add_component`
+
+Add a component to a Blueprint's component hierarchy.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `component_class` | string | **required** | Component class name (e.g. `StaticMeshComponent`, `PointLightComponent`) |
+| `name` | string | optional | Name for the new component |
+| `parent` | string | optional | Name of parent component. Defaults to root |
+| `attach_socket` | string | optional | Socket name on parent to attach to |
+
+---
+
+### `blueprint.remove_component`
+
+Remove a component from a Blueprint.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `component_name` | string | **required** | Name of the component to remove |
+| `promote_children` | bool | optional | Re-parent children to the removed component's parent. Default: `false` |
+
+---
+
+### `blueprint.rename_component`
+
+Rename a component in a Blueprint.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `component_name` | string | **required** | Current component name |
+| `new_name` | string | **required** | New component name |
+
+---
+
+### `blueprint.reparent_component`
+
+Change the parent of a component in the component hierarchy.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `component_name` | string | **required** | Name of the component to reparent |
+| `new_parent` | string | **required** | Name of the new parent component |
+| `attach_socket` | string | optional | Socket name on the new parent to attach to |
+
+---
+
+### `blueprint.set_component_property`
+
+Set a property value on a Blueprint component.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `component_name` | string | **required** | Name of the component |
+| `property_name` | string | **required** | Name of the property to set |
+| `value` | string | **required** | Value to set as string |
+
+---
+
+### `blueprint.duplicate_component`
+
+Duplicate an existing component within a Blueprint.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `component_name` | string | **required** | Name of the component to duplicate |
+| `new_name` | string | optional | Name for the duplicate. Auto-generated if omitted |
+
+---
+
+### `blueprint.add_function`
+
+Add a new function graph to a Blueprint.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `name` | string | **required** | Function name |
+| `is_pure` | bool | optional | Mark as pure (no exec pins). Default: `false` |
+| `is_const` | bool | optional | Mark as const. Default: `false` |
+| `is_static` | bool | optional | Mark as static. Default: `false` |
+| `call_in_editor` | bool | optional | Expose as callable in editor. Default: `false` |
+| `category` | string | optional | Category for editor organization |
+| `description` | string | optional | Tooltip description |
+| `access` | string | optional | Access level: `public`, `protected`, or `private`. Default: `public` |
+
+---
+
+### `blueprint.remove_function`
+
+Remove a function graph from a Blueprint.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `name` | string | **required** | Name of the function to remove |
+
+---
+
+### `blueprint.rename_function`
+
+Rename a function in a Blueprint.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `old_name` | string | **required** | Current function name |
+| `new_name` | string | **required** | New function name |
+
+---
+
+### `blueprint.add_macro`
+
+Add a new macro graph to a Blueprint.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `name` | string | **required** | Macro name |
+
+---
+
+### `blueprint.add_event_dispatcher`
+
+Add a new event dispatcher to a Blueprint.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `name` | string | **required** | Event dispatcher name |
+
+---
+
+### `blueprint.set_function_params`
+
+Set input and output parameters on a function.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `function_name` | string | **required** | Name of the function |
+| `inputs` | array | optional | Array of `{ name, type, default_value? }` input parameter objects |
+| `outputs` | array | optional | Array of `{ name, type }` output parameter objects |
+
+---
+
+### `blueprint.implement_interface`
+
+Add an interface implementation to a Blueprint.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `interface_class` | string | **required** | Interface class name to implement |
+
+---
+
+### `blueprint.remove_interface`
+
+Remove an interface implementation from a Blueprint.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `interface_class` | string | **required** | Interface class name to remove |
+| `preserve_functions` | bool | optional | Keep generated function graphs as regular functions. Default: `false` |
+
+---
+
+### `blueprint.reparent_blueprint`
+
+Change the parent class of a Blueprint.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `new_parent_class` | string | **required** | New parent class name |
+
+---
+
+### `blueprint.add_node`
+
+Add a node to a Blueprint graph.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `node_type` | string | **required** | Node type: `CallFunction`, `VariableGet`, `VariableSet`, `CustomEvent`, `Branch`, `Sequence`, `MacroInstance`, `SpawnActorFromClass` |
+| `graph_name` | string | optional | Target graph. Defaults to first UbergraphPage |
+| `position` | array | optional | `[x, y]` node position |
+| `function_name` | string | optional | For `CallFunction` — function to call (e.g. `ClassName::FunctionName`) |
+| `variable_name` | string | optional | For `VariableGet`/`VariableSet` — variable name |
+| `event_name` | string | optional | For `CustomEvent` — event name |
+| `class_name` | string | optional | For `SpawnActorFromClass` — actor class |
+| `macro_path` | string | optional | For `MacroInstance` — asset path of macro library |
+
+**Returns:** Node ID of the newly created node.
+
+---
+
+### `blueprint.remove_node`
+
+Remove a node from a Blueprint graph.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `node_id` | string | **required** | ID of the node to remove |
+| `graph_name` | string | optional | Graph containing the node |
+
+---
+
+### `blueprint.connect_pins`
+
+Connect two pins in a Blueprint graph.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `source_node` | string | **required** | ID of the source node |
+| `source_pin` | string | **required** | Name of the output pin on the source node |
+| `target_node` | string | **required** | ID of the target node |
+| `target_pin` | string | **required** | Name of the input pin on the target node |
+| `graph_name` | string | optional | Graph containing the nodes |
+
+---
+
+### `blueprint.disconnect_pins`
+
+Disconnect a pin connection in a Blueprint graph.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `node_id` | string | **required** | ID of the node whose pin to disconnect |
+| `pin_name` | string | **required** | Name of the pin to disconnect |
+| `target_node` | string | optional | Disconnect only the link to this specific target node |
+| `target_pin` | string | optional | Disconnect only the link to this specific target pin |
+| `graph_name` | string | optional | Graph containing the node |
+
+---
+
+### `blueprint.set_pin_default`
+
+Set the default value on a pin.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `node_id` | string | **required** | ID of the node |
+| `pin_name` | string | **required** | Name of the pin |
+| `value` | string | **required** | Default value as string |
+| `graph_name` | string | optional | Graph containing the node |
+
+---
+
+### `blueprint.set_node_position`
+
+Move a node to a new position in a graph.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `node_id` | string | **required** | ID of the node to move |
+| `position` | array | **required** | `[x, y]` new position |
+| `graph_name` | string | optional | Graph containing the node |
+
+---
+
+### `blueprint.compile_blueprint`
+
+Compile a Blueprint asset.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+
+**Returns:** Compile result with success/failure status and any compiler messages.
+
+---
+
+### `blueprint.validate_blueprint`
+
+Validate a Blueprint for errors without a full compile.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+
+**Returns:** Validation result with any errors or warnings found.
+
+---
+
+### `blueprint.create_blueprint`
+
+Create a new Blueprint asset.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `save_path` | string | **required** | Package path where the Blueprint will be saved (e.g. `/Game/Blueprints/BP_MyActor`) |
+| `parent_class` | string | **required** | Parent class name (e.g. `Actor`, `Character`, `ActorComponent`) |
+| `blueprint_type` | string | optional | Blueprint type: `Normal`, `Interface`, `MacroLibrary`, `FunctionLibrary`. Default: `Normal` |
+
+**Returns:** Asset path of the created Blueprint.
+
+---
+
+### `blueprint.duplicate_blueprint`
+
+Duplicate an existing Blueprint asset.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the source Blueprint |
+| `new_path` | string | **required** | Package path for the duplicate |
+
+**Returns:** Asset path of the duplicated Blueprint.
+
+---
+
+### `blueprint.get_dependencies`
+
+Get asset dependencies for a Blueprint.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Blueprint asset |
+| `direction` | string | optional | `depends_on` (what this Blueprint uses), `referenced_by` (what uses this Blueprint), or `both`. Default: `both` |
+
+**Returns:** Dependency lists with asset paths and types.
+
+---
+
 ## material
 
 Material graph editing and inspection tools.
@@ -189,19 +713,23 @@ Disconnect inputs or outputs on a named expression.
 | `asset_path` | string | **required** | Package path of the material asset |
 | `expression_name` | string | **required** | Name of the expression node |
 | `input_name` | string | optional | Specific input to disconnect |
+| `target_expression` | string | optional | Disconnect only links from this source expression |
+| `output_index` | number | optional | Disconnect only this output index on the source expression |
 | `disconnect_outputs` | bool | optional | Also disconnect outputs. Default: `false` |
 
 ---
 
 ### `material.build_material_graph`
 
-Build entire material graph from JSON spec in a single undo transaction.
+Build entire material graph from JSON spec in a single undo transaction. Automatically recompiles the material on success.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `asset_path` | string | **required** | Package path of the material asset |
 | `graph_spec` | object/string | **required** | JSON spec with `nodes`, `custom_hlsl_nodes`, `connections`, `outputs` arrays |
 | `clear_existing` | bool | optional | Clear existing graph before building. Default: `false` |
+
+**Returns:** Build result including `"recompiled": true` when compilation succeeded. Emits blend mode validation warnings (e.g. Opacity on Opaque, OpacityMask on non-Masked).
 
 ---
 
@@ -402,7 +930,7 @@ Duplicate a material asset to a new path.
 
 ### `material.get_compilation_stats`
 
-Get material compilation statistics: sampler count, texture estimates, UV scalars, blend mode, expression count.
+Get material compilation statistics: vertex shader instruction count, pixel shader instruction count, sampler count, texture estimates, UV scalars, blend mode, expression count.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -412,20 +940,20 @@ Get material compilation statistics: sampler count, texture estimates, UV scalar
 
 ### `material.set_expression_property`
 
-Set a property on an expression node (e.g., DefaultValue on a scalar parameter).
+Set a property on an expression node (e.g., DefaultValue on a scalar parameter). Also accepts `property_name` as an alias for the `property` param.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `asset_path` | string | **required** | Package path of the material asset |
 | `expression_name` | string | **required** | Name of the expression node |
-| `property` | string | **required** | Property name to set |
+| `property` | string | **required** | Property name to set (alias: `property_name`) |
 | `value` | any | **required** | Value to set |
 
 ---
 
 ### `material.connect_expressions`
 
-Wire an expression output to another expression input or a material property input.
+Wire an expression output to another expression input or a material property input. Emits blend mode validation warnings when connecting to Opacity/OpacityMask outputs on mismatched blend modes.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -1211,6 +1739,12 @@ Get PoseSearch database statistics.
 Niagara VFX system editing -- emitters, modules, parameters, renderers, and batch operations.
 
 > **Note:** All Niagara actions accept `asset_path` (preferred) or `system_path` (backward compatible) for the system asset path parameter.
+>
+> **Param aliases:** Several params accept multiple names for convenience:
+> - Module identifier: `module`, `module_name`, `module_node` (all interchangeable)
+> - Input name: `input`, `input_name` (interchangeable)
+> - Property name: `property`, `property_name` (interchangeable)
+> - Renderer class: `class`, `renderer_class`, `renderer_type` (interchangeable)
 
 ### Emitter Actions
 
@@ -1285,6 +1819,20 @@ Set an emitter property.
 
 ---
 
+#### `niagara.set_system_property`
+
+Set a system-level property via snake_case alias or reflection fallback.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Niagara system |
+| `property` | string | **required** | Property name (snake_case alias or reflected property name) |
+| `value` | any | **required** | Property value |
+
+Supported aliases: `warmup_time`, `b_determinism`, `b_fixed_tick_delta`, `random_seed`, `max_pool_size`, etc.
+
+---
+
 #### `niagara.request_compile`
 
 Request compilation of a Niagara system.
@@ -1327,7 +1875,33 @@ List all renderers across emitters in a Niagara system.
 | `asset_path` | string | **required** | Package path of the Niagara system |
 | `emitter` | string | optional | Filter to a specific emitter |
 
-**Returns:** Array of renderers with emitter, renderer class, index, enabled, and material.
+**Returns:** Array of renderers with emitter, `type` (short class name), index, enabled, and material.
+
+---
+
+#### `niagara.list_module_scripts`
+
+Search available Niagara module scripts by keyword.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | string | **required** | Keyword to search for in module script asset names and paths |
+
+**Returns:** Array of matching module script asset paths.
+
+---
+
+#### `niagara.list_renderer_properties`
+
+List editable properties on a renderer.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Niagara system |
+| `emitter` | string | **required** | Emitter handle ID |
+| `renderer` | string | **required** | Renderer index or class name |
+
+**Returns:** Array of property names and their current values.
 
 ---
 
@@ -1457,24 +2031,79 @@ Set a data interface on a module input.
 | `emitter` | string | **required** | Emitter handle ID |
 | `module_node` | string | **required** | Module node GUID |
 | `input` | string | **required** | Input parameter name |
-| `di_class` | string | **required** | Data interface class name |
+| `di_class` | string | **required** | Data interface class name (auto-resolves UNiagara/UNiagaraDataInterface prefix) |
 | `config` | string | optional | JSON configuration for DI properties |
+
+---
+
+#### `niagara.set_static_switch_value`
+
+Set a static switch value on a module input.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Package path of the Niagara system |
+| `emitter` | string | **required** | Emitter handle ID |
+| `module_node` | string | **required** | Module node GUID |
+| `input` | string | **required** | Static switch input name |
+| `value` | any | **required** | Switch value: bool (`true`/`false`), enum value name (string), or int |
 
 ---
 
 #### `niagara.create_module_from_hlsl`
 
-Create a Niagara module from HLSL.
+Create a standalone `UNiagaraScript` asset (module usage) with a CustomHlsl node and typed ParameterMap I/O pins. Supports CPU and GPU sim targets.
 
-*Delegates to Python bridge.*
+Input/output pin names must be bare identifiers — no dots. Dotted names like `Module.Color` are rejected; use `Color`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Destination package path for the new script asset (e.g. `/Game/VFX/Modules/MyModule`) |
+| `hlsl` | string | **required** | HLSL body. ParameterMap is handled automatically — write only the logic inside the function body |
+| `inputs` | array | optional | Input pin declarations. Each entry: `{ "name": "InValue", "type": "float" }` |
+| `outputs` | array | optional | Output pin declarations. Each entry: `{ "name": "OutResult", "type": "float" }` |
+| `sim_target` | string | optional | `"cpu"` (default) or `"gpu"` |
+
+**Example:**
+```json
+{
+  "asset_path": "/Game/VFX/Modules/ScaleByAge",
+  "hlsl": "float Age = Particles.NormalizedAge;\nParticles.Scale = float3(1,1,1) * (1.0 - Age);",
+  "sim_target": "cpu"
+}
+```
 
 ---
 
 #### `niagara.create_function_from_hlsl`
 
-Create a Niagara function from HLSL.
+Create a standalone `UNiagaraScript` asset (function usage) with a CustomHlsl node. Same as `create_module_from_hlsl` but with function usage context — for reusable HLSL logic called from other modules.
 
-*Delegates to Python bridge.*
+Input/output pin names must be bare identifiers — no dots.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `asset_path` | string | **required** | Destination package path for the new script asset |
+| `hlsl` | string | **required** | HLSL function body |
+| `inputs` | array | optional | Input pin declarations. Each entry: `{ "name": "InValue", "type": "float" }` |
+| `outputs` | array | optional | Output pin declarations. Each entry: `{ "name": "OutResult", "type": "float" }` |
+| `sim_target` | string | optional | `"cpu"` (default) or `"gpu"` |
+
+**Example:**
+```json
+{
+  "asset_path": "/Game/VFX/Functions/Remap01",
+  "hlsl": "OutValue = saturate((InValue - InMin) / (InMax - InMin));",
+  "inputs": [
+    { "name": "InValue", "type": "float" },
+    { "name": "InMin",   "type": "float" },
+    { "name": "InMax",   "type": "float" }
+  ],
+  "outputs": [
+    { "name": "OutValue", "type": "float" }
+  ]
+}
+```
 
 ---
 

@@ -419,10 +419,27 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsList(const TSharedPtr<FJ
 			ActionProp->SetArrayField(TEXT("enum"), EnumValues);
 			Properties->SetObjectField(TEXT("action"), ActionProp);
 
-			// "params" property (optional object)
+			// "params" property — embed per-action schemas so AI clients see param names before calling
+			FString ParamsDesc = TEXT("Parameters for the action. Per-action schemas (* = required):\n");
+			for (const FMonolithActionInfo& AI : Actions)
+			{
+				if (!AI.ParamSchema.IsValid() || AI.ParamSchema->Values.Num() == 0) continue;
+				ParamsDesc += FString::Printf(TEXT("\n%s:"), *AI.Action);
+				for (const auto& Pair : AI.ParamSchema->Values)
+				{
+					const TSharedPtr<FJsonObject>* PD = nullptr;
+					if (!Pair.Value->TryGetObject(PD) || !PD) continue;
+					bool bReq = false;
+					(*PD)->TryGetBoolField(TEXT("required"), bReq);
+					FString Type;
+					(*PD)->TryGetStringField(TEXT("type"), Type);
+					ParamsDesc += FString::Printf(TEXT(" %s%s(%s)"),
+						bReq ? TEXT("*") : TEXT(""), *Pair.Key, *Type);
+				}
+			}
 			TSharedPtr<FJsonObject> ParamsProp = MakeShared<FJsonObject>();
 			ParamsProp->SetStringField(TEXT("type"), TEXT("object"));
-			ParamsProp->SetStringField(TEXT("description"), TEXT("Parameters for the action"));
+			ParamsProp->SetStringField(TEXT("description"), ParamsDesc);
 			Properties->SetObjectField(TEXT("params"), ParamsProp);
 
 			InputSchema->SetObjectField(TEXT("properties"), Properties);
@@ -498,8 +515,32 @@ TSharedPtr<FJsonObject> FMonolithHttpServer::HandleToolsCall(const TSharedPtr<FJ
 		}
 
 		// Extract nested params if present, then merge in any top-level extras
+		// NOTE: Claude Code sends "params" as a JSON-encoded string, not a nested object.
+		// We must handle both cases.
 		const TSharedPtr<FJsonObject>* NestedParams = nullptr;
+		TSharedPtr<FJsonObject> ParsedParamsObj; // lifetime holder for string-parsed params
+		bool bHasNestedParams = false;
+
 		if (Arguments->TryGetObjectField(TEXT("params"), NestedParams) && NestedParams)
+		{
+			bHasNestedParams = true;
+		}
+		else
+		{
+			// Try parsing "params" as a JSON string (Claude Code serializes objects to strings)
+			FString ParamsStr;
+			if (Arguments->TryGetStringField(TEXT("params"), ParamsStr) && !ParamsStr.IsEmpty())
+			{
+				TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ParamsStr);
+				if (FJsonSerializer::Deserialize(Reader, ParsedParamsObj) && ParsedParamsObj.IsValid())
+				{
+					NestedParams = &ParsedParamsObj;
+					bHasNestedParams = true;
+				}
+			}
+		}
+
+		if (bHasNestedParams && NestedParams)
 		{
 			Arguments = MakeShared<FJsonObject>();
 			// Start with top-level extras (lower priority)

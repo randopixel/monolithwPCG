@@ -1,7 +1,7 @@
 {
 	"FileVersion": 3,
 	"Version": 1,
-	"VersionName": "0.7.1",
+	"VersionName": "0.7.2",
 	"FriendlyName": "Monolith",
 	"Description": "Unified Unreal Engine MCP server consolidating 9 domains into one plugin — Blueprints, Materials, Animation, Niagara, Editor, Config, Project Index, and Engine Source intelligence.",
 	"Category": "Editor",
@@ -12,7 +12,7 @@
 	"CanContainContent": false,
 	"IsBetaVersion": true,
 	"IsExperimentalVersion": false,
-	"Installed": false,
+	"Installed": true,
 	"EnabledByDefault": true,
 	"Plugins": [
 		{
@@ -25,6 +25,10 @@
 		},
 		{
 			"Name": "EnhancedInput",
+			"Enabled": true
+		},
+		{
+			"Name": "PCG",
 			"Enabled": true
 		}
 	],
@@ -71,6 +75,11 @@
 		},
 		{
 			"Name": "MonolithSource",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "MonolithPCG",
 			"Type": "Editor",
 			"LoadingPhase": "Default"
 		}

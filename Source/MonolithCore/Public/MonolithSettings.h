@@ -35,6 +35,10 @@ public:
 
 	// --- Indexing ---
 
+	/** Content paths to index in addition to /Game. Add plugin mount points like /MyPlugin. */
+	UPROPERTY(config, EditAnywhere, Category="Indexing")
+	TArray<FString> AdditionalContentPaths;
+
 	/** Override path for ProjectIndex.db (empty = default Saved/ location) */
 	UPROPERTY(config, EditAnywhere, Category="Indexing", meta=(RelativePath))
 	FDirectoryPath DatabasePathOverride;
@@ -77,6 +81,10 @@ public:
 	UPROPERTY(config, EditAnywhere, Category="Indexing|Deep Indexers")
 	bool bIndexInputActions = true;
 
+	/** Enable DataAsset property indexing (serializes all UPROPERTY defaults to JSON) */
+	UPROPERTY(config, EditAnywhere, Category="Indexing|Deep Indexers")
+	bool bIndexDataAssets = true;
+
 	/** Enable dependency graph indexing */
 	UPROPERTY(config, EditAnywhere, Category="Indexing|Post-Pass Indexers")
 	bool bIndexDependencies = true;
@@ -104,6 +112,10 @@ public:
 	/** Enable gameplay tag indexing */
 	UPROPERTY(config, EditAnywhere, Category="Indexing|Post-Pass Indexers")
 	bool bIndexGameplayTags = true;
+
+	/** Index content from enabled marketplace plugins (installed via Fab/Epic launcher) */
+	UPROPERTY(config, EditAnywhere, Category="Indexing")
+	bool bIndexMarketplacePlugins = true;
 
 	// --- Module Toggles ---
 
@@ -143,6 +155,12 @@ public:
 	// --- Helpers ---
 
 	static const UMonolithSettings* Get();
+
+	/** Returns /Game plus all AdditionalContentPaths as FName array for FARFilter usage */
+	static TArray<FName> GetIndexedContentPaths();
+
+	/** Returns true if the given package path starts with any indexed content path */
+	static bool IsIndexedContentPath(const FString& PackagePath);
 
 	/** Settings category path */
 	virtual FName GetCategoryName() const override { return FName(TEXT("Plugins")); }

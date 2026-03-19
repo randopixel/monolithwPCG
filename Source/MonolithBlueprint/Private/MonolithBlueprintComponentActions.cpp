@@ -286,6 +286,7 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleRenameComponent(
 
 	if (CompName.IsEmpty()) return FMonolithActionResult::Error(TEXT("component_name is required"));
 	if (NewName.IsEmpty())  return FMonolithActionResult::Error(TEXT("new_name is required"));
+	if (FName(*NewName).IsNone()) return FMonolithActionResult::Error(TEXT("'None' is a reserved FName and cannot be used as a component name"));
 
 	USCS_Node* Node = FindSCSNodeByName(BP->SimpleConstructionScript, FName(*CompName));
 	if (!Node)
@@ -293,10 +294,28 @@ FMonolithActionResult FMonolithBlueprintComponentActions::HandleRenameComponent(
 		return FMonolithActionResult::Error(FString::Printf(TEXT("Component not found: %s"), *CompName));
 	}
 
-	// Verify name is not already taken
+	// Verify name is not already taken by another SCS node
 	if (FindSCSNodeByName(BP->SimpleConstructionScript, FName(*NewName)))
 	{
 		return FMonolithActionResult::Error(FString::Printf(TEXT("A component named '%s' already exists"), *NewName));
+	}
+
+	// Check against BP member variables
+	for (const FBPVariableDescription& Var : BP->NewVariables)
+	{
+		if (Var.VarName == FName(*NewName))
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("Cannot rename component to '%s': a variable with that name already exists"), *NewName));
+		}
+	}
+
+	// Check against function graphs
+	for (UEdGraph* Graph : BP->FunctionGraphs)
+	{
+		if (Graph && Graph->GetFName() == FName(*NewName))
+		{
+			return FMonolithActionResult::Error(FString::Printf(TEXT("Cannot rename component to '%s': a function with that name already exists"), *NewName));
+		}
 	}
 
 	FBlueprintEditorUtils::RenameComponentMemberVariable(BP, Node, FName(*NewName));

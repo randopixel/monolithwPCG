@@ -49,10 +49,58 @@ public:
 	static FMonolithActionResult SetExpressionProperty(const TSharedPtr<FJsonObject>& Params);
 	static FMonolithActionResult ConnectExpressions(const TSharedPtr<FJsonObject>& Params);
 
+	// --- Wave 3: Free wins (graph utilities & inspection) ---
+	static FMonolithActionResult AutoLayout(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult DuplicateExpression(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult ListExpressionClasses(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult GetExpressionConnections(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult MoveExpression(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult GetMaterialProperties(const TSharedPtr<FJsonObject>& Params);
+
+	// --- Wave 4: Instance & property improvements ---
+	static FMonolithActionResult GetInstanceParameters(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult SetInstanceParameters(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult SetInstanceParent(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult ClearInstanceParameter(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult SaveMaterial(const TSharedPtr<FJsonObject>& Params);
+
+	// --- Wave 5: Graph editing power ---
+	static FMonolithActionResult UpdateCustomHlslNode(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult ReplaceExpression(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult GetExpressionPinInfo(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult RenameExpression(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult ListMaterialInstances(const TSharedPtr<FJsonObject>& Params);
+
+	// --- Wave 6: Material Functions ---
+	static FMonolithActionResult CreateMaterialFunction(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult BuildFunctionGraph(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult GetFunctionInfo(const TSharedPtr<FJsonObject>& Params);
+
+	// --- Wave 7: Batch & Advanced ---
+	static FMonolithActionResult BatchSetMaterialProperty(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult BatchRecompile(const TSharedPtr<FJsonObject>& Params);
+	static FMonolithActionResult ImportTexture(const TSharedPtr<FJsonObject>& Params);
+
 private:
 	/** Load a UMaterial from an asset path. Returns nullptr on failure. */
 	static UMaterial* LoadBaseMaterial(const FString& AssetPath);
 
 	/** Serialize a single expression node to JSON. */
 	static TSharedPtr<FJsonObject> SerializeExpression(const UMaterialExpression* Expression);
+
+	/**
+	 * Shared helper for building expression graphs in both Materials and MaterialFunctions.
+	 * Handles node creation (standard + Custom HLSL), property setting, and connection wiring.
+	 * Returns nodes_created, connections_made, id_to_name map via the ResultJson out param.
+	 * The CreateExpressionFunc callback abstracts the difference between CreateMaterialExpression
+	 * and CreateMaterialExpressionInFunction.
+	 */
+	using FCreateExpressionFunc = TFunction<UMaterialExpression*(UClass* ExprClass, int32 PosX, int32 PosY)>;
+	static void BuildGraphFromSpec(
+		const TSharedPtr<FJsonObject>& Spec,
+		const FCreateExpressionFunc& CreateExpressionFunc,
+		TMap<FString, UMaterialExpression*>& IdToExpr,
+		int32& OutNodesCreated,
+		int32& OutConnectionsMade,
+		TArray<TSharedPtr<FJsonValue>>& OutErrors);
 };

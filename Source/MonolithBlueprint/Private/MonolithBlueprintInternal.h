@@ -12,6 +12,7 @@
 #include "K2Node_Event.h"
 #include "K2Node_IfThenElse.h"
 #include "K2Node_Variable.h"
+#include "K2Node_CustomEvent.h"
 #include "K2Node_FunctionEntry.h"
 #include "K2Node_FunctionResult.h"
 #include "K2Node_MacroInstance.h"
@@ -384,6 +385,9 @@ namespace MonolithBlueprintInternal
 		return nullptr;
 	}
 
+	/** Returns true if a UK2Node_CustomEvent with the given name already exists in any graph of the Blueprint */
+	bool HasCustomEventNamed(UBlueprint* BP, FName EventName);
+
 	// Parse MCP-friendly type string to FEdGraphPinType
 	inline FEdGraphPinType ParsePinTypeFromString(const FString& TypeStr)
 	{
@@ -493,6 +497,20 @@ namespace MonolithBlueprintInternal
 			FString EnumName = BaseType.Mid(5);
 			UEnum* FoundEnum = FindFirstObject<UEnum>(*EnumName, EFindFirstObjectOptions::NativeFirst);
 			if (FoundEnum) PinType.PinSubCategoryObject = FoundEnum;
+		}
+		else if (BaseType.StartsWith(TEXT("softobject:")))
+		{
+			PinType.PinCategory = UEdGraphSchema_K2::PC_SoftObject;
+			FString ClassName = BaseType.Mid(11);
+			UClass* FoundClass = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::NativeFirst);
+			if (FoundClass) PinType.PinSubCategoryObject = FoundClass;
+		}
+		else if (BaseType.StartsWith(TEXT("softclass:")))
+		{
+			PinType.PinCategory = UEdGraphSchema_K2::PC_SoftClass;
+			FString ClassName = BaseType.Mid(10);
+			UClass* FoundClass = FindFirstObject<UClass>(*ClassName, EFindFirstObjectOptions::NativeFirst);
+			if (FoundClass) PinType.PinSubCategoryObject = FoundClass;
 		}
 		else if (BaseType == TEXT("exec"))
 		{

@@ -1,6 +1,48 @@
 # Monolith — TODO
 
-Last updated: 2026-03-16
+Last updated: 2026-03-25
+
+---
+
+### Niagara Expansion — 31 New Actions (2026-03-25)
+
+- [x] **Dynamic Inputs (5):** `list_dynamic_inputs`, `get_dynamic_input_tree`, `remove_dynamic_input`, `get_dynamic_input_value`, `get_dynamic_input_inputs`
+- [x] **Emitter Management (3):** `rename_emitter`, `get_emitter_property`, `list_available_renderers`
+- [x] **Renderer Configuration (3):** `set_renderer_mesh`, `configure_ribbon`, `configure_subuv`
+- [x] **Event Handlers (3):** `get_event_handlers`, `set_event_handler_property`, `remove_event_handler`
+- [x] **Simulation Stages (3):** `get_simulation_stages`, `set_simulation_stage_property`, `remove_simulation_stage`
+- [x] **Module Outputs (1):** `get_module_output_parameters`
+- [x] **Niagara Parameter Collections (5):** `create_npc`, `get_npc`, `add_npc_parameter`, `remove_npc_parameter`, `set_npc_default`
+- [x] **Effect Types (3):** `create_effect_type`, `get_effect_type`, `set_effect_type_property`
+- [x] **Utilities (5):** `get_available_parameters`, `preview_system`, `diff_systems`, `save_emitter_as_template`, `clone_module_overrides`
+- [x] **`move_module` rewrite** — Complete rewrite of move_module to preserve input overrides
+- [x] **7 bug fixes** — type fallback warning, spawn shape duplicate, NPC namespace mismatch, + 4 others found during testing
+- [x] **Full test pass** — 40/40 PASS, 0 FAIL, 3 SKIPPED. Total Niagara actions: 65 → 96.
+
+---
+
+### Material Function Full Suite (2026-03-25)
+
+- [x] **export_function_graph** — Full graph export with connections, properties, switch details (#7)
+- [x] **set_function_metadata** — Update description, categories, library exposure
+- [x] **delete_function_expression** — Remove expression(s) from function
+- [x] **update_material_function** — Recompile cascade to referencing materials
+- [x] **create_function_instance** — Create MFI with parent + optional overrides
+- [x] **set_function_instance_parameter** — Set param overrides on MFI
+- [x] **get_function_instance_info** — Read MFI parent chain + overrides (11 param types)
+- [x] **layout_function_expressions** — Auto-arrange function graph
+- [x] **rename_function_parameter_group** — Rename param group
+- [x] **create_material_function type param** — Support MaterialLayer/MaterialLayerBlend creation
+
+---
+
+### MonolithUI Module (2026-03-22)
+
+- [x] **NEW: MonolithUI module** — IMPLEMENTED (2026-03-22). 42 actions across 8 action classes in the `ui` namespace (`ui_query` tool). Widget blueprint CRUD, slot layout, HUD/menu templates, styling, UMG animation CRUD, binding inspection, settings scaffolding, accessibility.
+- [x] **MonolithUI — MCP testing** — DONE (2026-03-22). All 42 actions PASS. Full test results in TESTING.md.
+- [ ] **MonolithUI — Phase 3 deprecation warnings** — `GetBindings` and `FMovieSceneBinding::GetName` may generate deprecation warnings in UE 5.7. Audit and update call sites.
+- [x] **MonolithUI — agent skill file** — DONE (2026-03-22). `unreal-ui` skill created in `.claude/skills/` and `Plugins/Monolith/Skills/`, added to `interface-architect` agent definition.
+- [x] **MonolithUI — bUIEnabled settings toggle** — DONE (2026-03-22). `UMonolithSettings::bUIEnabled` wired to registration gating (confirmed in SPEC.md settings table).
 
 ---
 
@@ -93,11 +135,11 @@ Priority features identified for future waves:
 ## Completed
 
 - [x] Core infrastructure (HTTP server, registry, settings, JSON utils, asset utils)
-- [x] All 9 domain modules compiling clean on UE 5.7
+- [x] All 10 domain modules compiling clean on UE 5.7
 - [x] SQLite FTS5 project indexer with 14 indexers (Blueprint, Material, Generic, Dependency, Animation, Niagara, DataTable, Level, GameplayTag, Config, Cpp, UserDefinedEnum, UserDefinedStruct, InputAction)
 - [x] Python tree-sitter engine source indexer
 - [x] Auto-updater via GitHub Releases
-- [x] 9 Claude Code skills (including unreal-build)
+- [x] 10 Claude Code skills (including unreal-build and unreal-ui)
 - [x] Templates (.mcp.json, CLAUDE.md)
 - [x] README, LICENSE, ATTRIBUTION
 - [x] HTTP body null-termination fix
@@ -227,3 +269,4 @@ Priority features identified for future waves:
 - [x] **Animation Waves 1-7: 39 new actions** — IMPLEMENTED (2026-03-10). Total animation module: 62 actions + 5 PoseSearch = 67. Waves: 8 read actions, 4 notify CRUD, 5 curve CRUD, 6 skeleton+blendspace, 6 creation+montage, 5 PoseSearch, 5 modifiers+composites. Build errors fixed: BlendParameters private, GetTargetSkeleton removed, UMirrorDataTable forward-decl, GetBoneAnimationTracks deprecated, OpenBracket FText.
 - [x] **Blueprint module upgrade: 6 → 46 actions** — IMPLEMENTED (2026-03-13). Added 40 new write actions across 5 categories: Variable CRUD (7), Component CRUD (6), Graph Management (9), Node & Pin Operations (6), Compile & Create (5). Also expanded Read Actions to 13 (added get_components, get_component_details, get_functions, get_event_dispatchers, get_parent_class, get_interfaces, get_construction_script). Total plugin actions: 177 → 217.
 - [x] **Offline CLI (`monolith_offline.py`)** — IMPLEMENTED (2026-03-13). Pure Python (stdlib only) CLI that queries `EngineSource.db` and `ProjectIndex.db` directly without the editor running. 14 actions across 2 namespaces: `source` (9 actions, mirrors `source_query`) and `project` (5 actions, mirrors `project_query`). Read-only, zero footprint, zero dependencies. Fallback for when MCP/editor is unavailable. Location: `Saved/monolith_offline.py`.
+- [x] **NEW: MonolithUI module** — IMPLEMENTED (2026-03-22). New module at `Source/MonolithUI/`. 42 actions in `ui` namespace (`ui_query` tool). 8 action classes: FMonolithUIActions (7), FMonolithUISlotActions (3), FMonolithUITemplateActions (8), FMonolithUIStylingActions (6), FMonolithUIAnimationActions (5), FMonolithUIBindingActions (4), FMonolithUISettingsActions (5), FMonolithUIAccessibilityActions (4).

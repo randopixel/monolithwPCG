@@ -146,6 +146,9 @@ public:
 	UPROPERTY(config, EditAnywhere, Category="Modules")
 	bool bEnablePCG = true;
 
+	UPROPERTY(config, EditAnywhere, Category="Modules")
+	bool bEnableUI = true;
+
 	// --- Logging ---
 
 	/** Log verbosity for Monolith systems */

@@ -5,7 +5,7 @@ description: Use when creating, editing, or inspecting Unreal Engine materials v
 
 # Unreal Material Workflows
 
-You have access to **Monolith** with 25 material actions via `material_query()`.
+You have access to **Monolith** with 57 material actions via `material_query()`.
 
 ## Discovery
 
@@ -20,39 +20,75 @@ All asset paths follow UE content browser format (no .uasset extension):
 | Location | Path Format | Example |
 |----------|------------|---------|
 | Project Content/ | `/Game/Path/To/Asset` | `/Game/Materials/M_Rock` |
-| Project Plugins/ | `/PluginName/Path/To/Asset` | `/CarnageFX/Materials/M_Blood` |
+| Project Plugins/ | `/PluginName/Path/To/Asset` | `/MassProjectile/Materials/M_Example` |
 | Engine Plugins | `/PluginName/Path/To/Asset` | `/Niagara/DefaultAssets/SystemAssets/NS_Default` |
 
 ## Key Parameter Names
 
 - `asset_path` — the material asset path (NOT `asset`)
 
-## Action Reference (25 actions)
+## Action Reference (57 actions)
 
-### Read Actions
+### Read Actions (18)
 | Action | Key Params | Purpose |
 |--------|-----------|---------|
 | `get_all_expressions` | `asset_path` | List all expression nodes in a material |
 | `get_expression_details` | `asset_path`, `expression_name` | Inspect a specific node's properties and pins |
+| `get_expression_connections` | `asset_path`, `expression_name` | Get input and output connections for a single expression |
 | `get_full_connection_graph` | `asset_path` | Complete node/wire topology |
 | `get_material_parameters` | `asset_path` | List all scalar/vector/texture parameters |
+| `get_material_properties` | `asset_path` | Read all material settings: blend_mode, shading_model, domain, two_sided, usage_flags, expression_count. Works on UMaterial and UMaterialInstance |
 | `get_compilation_stats` | `asset_path` | Instruction counts (vertex + pixel shader), sampler usage, blend mode, compile status |
 | `get_layer_info` | `asset_path` | Inspect material layer/blend stack |
+| `list_expression_classes` | `filter`?, `category`? | List all available expression classes with pin counts. Cached after first call |
+| `get_expression_pin_info` | `class_name` | Query pin names/types for an expression class without creating an instance in a material |
+| `list_material_instances` | `parent_path`, `recursive`? | Find all instances of a parent material. Recursive walks instance-of-instance trees |
+| `get_function_info` | `asset_path` | Read material function inputs, outputs, description, expression list |
 | `export_material_graph` | `asset_path`, `include_properties`?, `include_positions`? | Serialize graph as JSON. Pass `include_properties: false` to reduce ~70% |
+| `export_function_graph` | `asset_path`, `include_properties`?, `include_positions`? | Full material function graph export — nodes, connections, properties, inputs, outputs, switch details |
+| `get_function_instance_info` | `asset_path` | Read MFI parent chain, all 11 parameter override types, inputs/outputs |
 | `get_thumbnail` | `asset_path`, `save_to_file`? | Get thumbnail. Use `save_to_file: true` — inline base64 wastes context |
 | `validate_material` | `asset_path`, `fix_issues`? | Check for broken connections, unused nodes, errors |
 | `render_preview` | `asset_path` | Trigger material compilation and preview |
 
-### Write Actions
+### Instance Actions (5)
 | Action | Key Params | Purpose |
 |--------|-----------|---------|
+| `get_instance_parameters` | `asset_path` | Read all parameter overrides from a MIC — scalar, vector, texture, static switch with override detection |
+| `set_instance_parameters` | `asset_path`, `parameters` (array of `{name, type, value}`) | Batch-set multiple instance parameters in one call. Single recompile at end |
+| `set_instance_parent` | `asset_path`, `new_parent` | Reparent a material instance. Reports lost/kept parameters |
+| `clear_instance_parameter` | `asset_path`, `parameter_name`, `parameter_type`? | Remove a single override (reverts to parent). Use type `"all"` to clear everything |
+| `save_material` | `asset_path`, `only_if_dirty`? | Save material to disk. One-liner |
+
+### Function Actions (9)
+| Action | Key Params | Purpose |
+|--------|-----------|---------|
+| `create_material_function` | `asset_path`, `type`?, `description`?, `expose_to_library`? | Create material function, layer, or layer blend (`type`: MaterialFunction/MaterialLayer/MaterialLayerBlend) |
+| `build_function_graph` | `asset_path`, `graph_spec` (with `inputs`, `outputs`, `nodes`, `connections`) | Build function graph with typed I/O. Same node spec as build_material_graph |
+| `set_function_metadata` | `asset_path`, `description`?, `expose_to_library`?, `library_categories`? | Update function description, categories, library exposure |
+| `delete_function_expression` | `asset_path`, `expression_name` | Remove expression(s) from function. Comma-separated names for batch. Rejects MFI paths |
+| `update_material_function` | `asset_path` | Recompile function and cascade to all referencing materials/instances |
+| `create_function_instance` | `asset_path`, `parent`, `scalar_overrides`?, `vector_overrides`?, `texture_overrides`?, `static_switch_overrides`? | Create MFI with parent + optional param overrides |
+| `set_function_instance_parameter` | `asset_path`, `parameter_name`, `scalar_value`?/`vector_value`?/`texture_value`?/`switch_value`? | Set param override on MFI |
+| `layout_function_expressions` | `asset_path` | Auto-arrange function graph layout. Rejects MFI paths |
+| `rename_function_parameter_group` | `asset_path`, `old_group`, `new_group` | Rename param group across all parameters |
+
+### Write Actions (21)
+| Action | Key Params | Purpose |
+|--------|-----------|---------|
+| `auto_layout` | `asset_path` | Topological-sort layout on all expressions. Works on UMaterial and UMaterialFunction |
 | `create_material` | `asset_path`, `blend_mode`?, `shading_model`?, `two_sided`? | Create a new empty material with properties |
-| `build_material_graph` | `asset_path`, `graph_spec`, `clear_existing`? | Build entire graph from JSON spec (fastest path). Emits blend mode validation warnings (e.g. Opacity on Opaque, OpacityMask on non-Masked) |
+| `build_material_graph` | `asset_path`, `graph_spec`, `clear_existing`? | Build entire graph from JSON spec (fastest path). Emits blend mode validation warnings |
 | `create_custom_hlsl_node` | `asset_path`, `code`, `inputs`?, `additional_outputs`? | Add a Custom HLSL expression |
-| `set_material_property` | `asset_path`, `blend_mode`?, `shading_model`?, `two_sided`?, etc. | Set material-level properties |
+| `update_custom_hlsl_node` | `asset_path`, `expression_name`, `code`?, `inputs`?, `additional_outputs`? | Edit existing Custom HLSL node without rebuild |
+| `replace_expression` | `asset_path`, `expression_name`, `new_class`, `preserve_connections`? | Swap node type in-place. Reconnects by pin name match, index fallback with warnings |
+| `rename_expression` | `asset_path`, `expression_name`, `new_desc` | Set user-visible label (Desc property) on an expression |
+| `duplicate_expression` | `asset_path`, `expression_name`, `offset_x`?, `offset_y`? | Duplicate a node with position offset. Connections NOT duplicated |
+| `move_expression` | `asset_path`, `expression_name` OR `expressions` (array), `pos_x`, `pos_y`, `relative`? | Reposition expressions. Batch mode with array. `relative: true` for offsets |
+| `set_material_property` | `asset_path`, `blend_mode`?, `shading_model`?, `two_sided`?, etc. | Set material-level properties. Accepts both short (`"Additive"`) and prefixed (`"BLEND_Additive"`) enum forms |
 | `set_expression_property` | `asset_path`, `expression_name`, `property_name`, `value` | Set a property on an existing expression |
-| `connect_expressions` | `asset_path`, `from_expression`, `to_expression`/`to_property` | Wire two expressions or wire to material output. Emits blend mode validation warnings when connecting to Opacity/OpacityMask outputs |
-| `disconnect_expression` | `asset_path`, `expression_name`, `input_name`?, `target_expression`?, `output_index`? | Remove connections. Use `target_expression` + `output_index` to disconnect a specific connection |
+| `connect_expressions` | `asset_path`, `from_expression`, `to_expression`/`to_property` | Wire two expressions or wire to material output |
+| `disconnect_expression` | `asset_path`, `expression_name`, `input_name`?, `target_expression`?, `output_index`? | Remove connections. Use `target_expression` + `output_index` for targeted disconnection |
 | `delete_expression` | `asset_path`, `expression_name` | Delete an expression node |
 | `create_material_instance` | `asset_path`, `parent_material` | Create a material instance |
 | `set_instance_parameter` | `asset_path`, `parameter_name`, `scalar_value`/`vector_value`/`texture_value` | Set instance parameter |
@@ -61,6 +97,18 @@ All asset paths follow UE content browser format (no .uasset extension):
 | `import_material_graph` | `asset_path`, `graph_json`, `mode`? | Deserialize graph from JSON |
 | `begin_transaction` | `transaction_name` | Start an undo group |
 | `end_transaction` | — | End an undo group |
+
+### Batch Actions (3)
+| Action | Key Params | Purpose |
+|--------|-----------|---------|
+| `batch_set_material_property` | `asset_paths` (array), `properties` | Apply same properties to multiple materials in one call |
+| `batch_recompile` | `asset_paths` (array) | Recompile multiple materials, returns per-material VS/PS instruction counts |
+| `import_texture` | `source_file`, `dest_path`, `compression`?, `srgb`?, `max_size`? | Import texture from disk with compression/sRGB settings |
+
+### Compound Actions (1)
+| Action | Key Params | Purpose |
+|--------|-----------|---------|
+| `create_pbr_material_from_disk` | `material_path`, `texture_folder`, `maps`, `blend_mode`?, `shading_model`?, `material_domain`?, `two_sided`?, `max_texture_size`?, `opacity_from_alpha`?, `replace_existing`? | Import PBR textures from disk, create material, build graph, and compile in one call. Keys in maps: basecolor, normal, roughness, metallic, ao, height, emissive, opacity. Set opacity_from_alpha=true for decals. |
 
 ## PBR Material Workflow
 
@@ -114,6 +162,35 @@ material_query({ action: "build_material_graph", params: {
 ### 2. Validate after changes
 ```
 material_query({ action: "validate_material", params: { asset_path: "/Game/Materials/M_Rock" } })
+```
+
+### One-Shot PBR from Disk (SIGIL Integration)
+
+For importing pre-generated PBR maps from disk and creating a complete material in a single call:
+
+```
+material_query({ action: "create_pbr_material_from_disk", params: {
+  material_path: "/Game/Materials/SIGIL/M_BloodConcrete",
+  texture_folder: "/Game/Textures/SIGIL/BloodConcrete",
+  maps: {
+    basecolor: "D:/Projects/SIGIL/output/basecolor.png",
+    normal: "D:/Projects/SIGIL/output/normal.png",
+    roughness: "D:/Projects/SIGIL/output/roughness.png"
+  },
+  max_texture_size: 2048
+}})
+```
+
+For decals (single RGBA with alpha transparency):
+```
+material_query({ action: "create_pbr_material_from_disk", params: {
+  material_path: "/Game/Materials/SIGIL/Decals/M_BloodSplatter",
+  texture_folder: "/Game/Textures/SIGIL/Decals",
+  maps: { basecolor: "D:/output/blood_splatter.png" },
+  blend_mode: "Translucent",
+  material_domain: "DeferredDecal",
+  opacity_from_alpha: true
+}})
 ```
 
 ## Editing Existing Materials
@@ -198,4 +275,4 @@ When building materials for VFX, the material agent runs FIRST. The Niagara agen
 - Use `get_all_expressions` + `get_full_connection_graph` for inspection. Only use `export_material_graph` for round-tripping. Pass `include_properties: false` to reduce payload by ~70%
 - Use `render_preview` or `get_thumbnail` with `save_to_file: true` — inline base64 wastes context window
 - Blend mode warnings from `connect_expressions` / `build_material_graph` are informational — the connection is made, but the output pin is inactive unless the material's blend mode matches
-- There are exactly 25 material actions — use `monolith_discover("material")` to see them all
+- There are exactly 57 material actions — use `monolith_discover("material")` to see them all

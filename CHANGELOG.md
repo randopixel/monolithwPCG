@@ -6,6 +6,186 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-04-03
+
+### Fixed
+
+- **UE 5.7 compatibility** — resolved deprecated API usages that caused C2220 (warning-as-error) failures in non-unity builds ([#12](https://github.com/tumourlove/monolith/issues/12))
+  - NavMesh: direct property access → `GetCellSize`/`SetCellSize`/`GetCellHeight`/`SetCellHeight`/`GetAgentMaxStepHeight`/`SetAgentMaxStepHeight` with `ENavigationDataResolution`
+  - GAS: `EGameplayAbilityInstancingPolicy::NonInstanced` removed → legacy value cast
+  - GAS: `StackingType` made private → reflection-based getter/setter
+  - `FPackageName::DoesPackageExist` signature change (removed nullable param)
+  - `FCollisionQueryParams::ClearIgnoredActors` → `ClearIgnoredSourceObjects`
+  - `GetUsedTextures` simplified signature
+  - `UMovieScene::GetBindings` const correctness, `FMovieSceneBinding::GetName` removal
+- **Non-unity build** — fixed symbol collisions across 8 files (`VecToArr`, `ParseVectorArray`, `ParseStringArray`, `GetAssetPath` renamed to module-prefixed variants)
+- **ComboGraph log category** — eliminated duplicate `DEFINE_LOG_CATEGORY_STATIC` across `#if`/`#else` branches; proper extern declaration in header
+- **Uninitialized variables** — `FVector` locals now zero-initialized to suppress C4700/C6001
+
+### Improved
+
+- **StateTree schema resolution** — `ResolveStateTreeSchemaClass` searches multiple candidate paths including `/Script/GameplayStateTreeModule.*`
+- **UI animation system** — `FindOrCreateWidgetAnimationBinding`, `FindOrCreateFloatTrack` helpers; transform/color component keyframes; proper `WidgetVariableNameToGuidMap` bookkeeping
+- **UI param handling** — new `TryGetRequiredString`, `GetOptionalString`, `GetOptionalBool` helpers; duplicate-asset guard on widget creation
+
+## [0.12.0] - 2026-04-01
+
+Biggest release yet: +310 actions (815 to 1125). Two new domain modules (MonolithAI, MonolithLogicDriver), ComboGraph expansion. Python-to-C++ port of standalone tools eliminates Python as a runtime dependency. 14 skills (up from 12).
+
+### Added
+
+**MonolithAI (229 actions) — AI Asset Manipulation**
+
+The most comprehensive AI tooling available through any MCP server. 229 actions across 15 categories, 24K lines C++, 30 files. Covers Behavior Trees, Blackboards, State Trees, EQS, Smart Objects, AI Controllers, AI Perception, Navigation, Runtime debugging, Scaffolds, Discovery, and Advanced categories.
+
+- Crown jewels: `build_behavior_tree_from_spec` and `build_state_tree_from_spec` — create complete AI assets from a JSON specification
+- BT nodes: tasks, decorators, services, composites — full CRUD with property configuration
+- Blackboard: key CRUD with type configuration (bool, int, float, string, name, vector, rotator, enum, object, class)
+- State Trees: states, transitions, conditions, tasks, evaluators — full structural editing
+- EQS: queries, generators, tests — complete template management
+- Smart Objects: definitions, slots, behaviors, tags, claim policies
+- AI Controllers: Blueprint creation, BT/BB assignment, perception, pathfinding config
+- Perception: sight, hearing, damage, touch — sense parameters, stimulus sources
+- Navigation: mesh queries, path filtering, invokers, query filters, avoidance
+- Runtime/PIE: start/stop BTs, query active nodes, inspect BB values, debug perception
+- Scaffolding: patrol AI, combat AI, companion AI, guard AI — complete setup generation
+- Conditional on `#if WITH_STATETREE`, `#if WITH_SMARTOBJECTS` (required). Optional: `#if WITH_MASSENTITY`, `#if WITH_ZONEGRAPH`
+
+**MonolithLogicDriver (66 actions) — Logic Driver Pro State Machines**
+
+Full integration with Logic Driver Pro marketplace plugin. Reflection-only (no direct C++ API linkage, version-agnostic). Conditional on `#if WITH_LOGICDRIVER` with 3-location Build.cs detection.
+
+- SM CRUD: create, inspect, compile, delete, list, duplicate, validate
+- Graph read/write: add states, transitions, configure properties, set transition rules
+- Node config: state nodes, conduits, transition events, property editing via reflection
+- Runtime/PIE: start, stop, query active states, trigger transitions, inspect variables
+- `build_sm_from_spec`: one-shot state machine creation from JSON specification
+- JSON spec: export, import, validate, diff for templating and version control
+- Scaffolding: door controller, health system, AI patrol, dialogue, elevator, puzzle, inventory
+- Components: add/configure Logic Driver components on actors
+- Text graph: text-based visualization for debugging
+- Discovery: list node classes, state types, templates
+
+**MonolithComboGraph expanded (12 → 13 actions)**
+
+- Added `auto_layout` action for combo graph node arrangement
+
+**Standalone C++ Tools (Python-to-C++ port)**
+
+Two standalone C++ executables replace the Python scripts. Zero Python dependency at runtime, zero UE dependency, instant startup.
+
+- **`monolith_proxy.exe`** (473KB) — MCP stdio-to-HTTP proxy, replaces `Scripts/monolith_proxy.py`. Full feature parity: JSON-RPC, health poll, tool dedup, editor query splitting, action allowlist/denylist. Built with WinHTTP + nlohmann/json. Source: `Tools/MonolithProxy/monolith_proxy.cpp` (775 lines).
+- **`monolith_query.exe`** (1.8MB) — Offline DB query tool, replaces `monolith_offline.py` AND `MonolithQueryCommandlet`. 14 actions: 9 source (search_source, read_source, find_callers, find_callees, find_references, get_class_hierarchy, get_module_info, get_symbol_context, read_file) + 5 project (search, find_by_type, find_references, get_stats, get_asset_details). Built with sqlite3 amalgamation. Source: `Tools/MonolithQuery/monolith_query.cpp` (1080 lines).
+- Python scripts remain as deprecated fallbacks for environments without the exe
+- `MonolithQueryCommandlet` deleted — standalone exe is faster (instant startup vs 6+ second UE engine load)
+- 2 new Claude Code skills: `unreal-logicdriver`, `unreal-combograph`
+
+### Changed
+
+- Total: 815 → 1125 actions across 15 modules (was 13), exposed through 18 MCP tools (was 15)
+- Blueprint: 86 → 88 actions
+- ComboGraph: 12 → 13 actions
+- Skills: 12 → 14 bundled with plugin
+- `.mcp.json` recommended proxy config changed from Python script to `monolith_proxy.exe`
+- Python is no longer required for any core functionality (only for optional project C++ source indexing via `Scripts/index_project.py`)
+
+### Removed
+
+- `MonolithQueryCommandlet` — replaced by standalone `monolith_query.exe`
+
+---
+
+## [0.11.0] - 2026-03-30
+
+Massive expansion: +372 actions (443 → 815). Three new modules (MonolithMesh, MonolithGAS, MonolithUI) plus MonolithBABridge integration. MCP auto-reconnect proxy for Claude Code. Optional module system for third-party plugin integrations. Automated release builds with MONOLITH_RELEASE_BUILD env var. 12 skills (up from 9).
+
+### Added
+
+**MCP Auto-Reconnect Proxy**
+
+Claude Code has a known issue where HTTP MCP sessions die permanently when the Unreal Editor restarts — forcing you to restart Claude Code every time you recompile, crash, or close the editor. Monolith now ships with a **stdio-to-HTTP proxy** (`Scripts/monolith_proxy.py`) that eliminates this entirely.
+
+**Who it's for:** Claude Code users. Cursor and Cline handle reconnection natively and don't need this.
+
+**What it does:**
+- Keeps your MCP session alive across editor restarts — zero manual intervention
+- Background health poll auto-detects when the editor comes up or goes down
+- Sends `notifications/tools/list_changed` so Claude Code refreshes its tool list automatically
+- When the editor is down, tool calls return graceful errors instead of killing the session
+- When the editor comes back, the next tool call just works
+
+**How to use it:** Update your `.mcp.json` to use the proxy instead of direct HTTP:
+
+```json
+{
+  "mcpServers": {
+    "monolith": {
+      "command": "Plugins/Monolith/Scripts/monolith_proxy.bat",
+      "args": []
+    }
+  }
+}
+```
+
+Requires Python 3.8+ (stdlib only, no pip install). The `.bat` launcher auto-finds Python. No Python? The direct HTTP config still works — you'll just need to restart Claude Code after editor restarts.
+
+- `Scripts/monolith_proxy.py` — stdio-to-HTTP proxy (pure Python, zero dependencies)
+- `Scripts/monolith_proxy.bat` — Windows launcher that auto-detects Python
+- `Templates/.mcp.json.proxy.example` — ready-to-copy config template
+
+**MonolithMesh (242 actions — 197 core + 45 experimental town gen)**
+
+The biggest module in Monolith. 22 capability tiers covering the entire spatial side of Unreal level design:
+
+- **Core (197 actions):** Mesh inspection and comparison. Full actor CRUD with scene manipulation. Physics-based spatial queries (raycasts, sweeps, overlaps, navmesh) that work in-editor without PIE. Level blockout workflow with auto-matching and atomic replacement. GeometryScript mesh operations (boolean, simplify, remesh, LOD gen, UV projection, mirroring). Horror spatial analysis — sightlines, hiding spots, ambush points, choke points, zone tension, pacing curves, dead-end detection. Accessibility validation with A-F grading. Lighting analysis with dark corner detection and mood-based placement suggestions. Audio/acoustics with Sabine RT60 reverb estimation, stealth maps, quiet path routing, AI hearing simulation. Performance budgeting with region analysis, overdraw detection, shadow cost analysis. Decal placement with Catmull-Rom paths and 5 horror storytelling presets. Level design tools for lights, volumes, sublevels, prefabs, splines, HISM instancing. Tech art pipeline for mesh import, LOD gen, texel density, collision authoring, lightmap analysis. Context-aware prop scatter on any surface (floors, shelves, tables, walls, ceilings) with room disturbance levels. Procedural geometry — parametric furniture (15 types), horror props (7 types), architectural structures, multi-story buildings, mazes (3 algorithms), pipes, mesh fragmentation, terrain patches. Genre preset system (storytelling patterns, acoustic profiles, tension profiles) for any game type. Encounter design with patrol routes, safe room evaluation, scare sequence generation, and accessibility intensity validation. Quality and polish tools including naming conventions, batch rename, proxy mesh generation, HLOD, texture budgets, composition framing, and monster reveal scoring.
+- **Town Gen (45 actions) — Work-in-progress:** Procedural floor plans, building facades, roofs, city blocks, spatial registry, auto-volumes, terrain/foundations, architectural features, room furnishing, debug views. Disabled by default (`bEnableProceduralTownGen` in Editor Preferences). Known geometry issues — wall misalignment, room separation. Very much a WIP; unless you're willing to dig in and help improve it, it's best left alone for now.
+
+**MonolithGAS (130 actions)**
+
+Complete Gameplay Ability System integration across 10 categories. All 4 implementation phases complete, 53/53 tests PASS.
+
+- **Abilities (14):** Create, grant, revoke, activate, inspect, list, configure activation policies, cooldowns, costs, tags
+- **Attributes (16):** AttributeSet CRUD for both C++ and Blueprint-based sets (Blueprint mode requires optional GBA plugin). Define attributes with min/max clamping, initialize from DataTables
+- **Effects (18):** Gameplay Effect authoring with modifiers, duration policies, stacking, period, conditional application, granted abilities, immunity
+- **ASC (12):** Ability System Component management — grant/revoke abilities, apply/remove effects, query active abilities and effects, initialize from DataTables
+- **Tags (10):** Gameplay Tag utilities — query, add, remove, check tag containers, hierarchical queries
+- **Cues (10):** Gameplay Cue management — create, trigger, inspect cues for audio/visual feedback
+- **Targeting (12):** Target data generation, targeting tasks, trace-based and actor-based targeting
+- **Input (8):** Input binding for ability activation via Enhanced Input
+- **Inspect (16):** Runtime debugging — query active effects, ability states, attribute values, cooldown status, blocking tags
+- **Scaffold (14):** Generate complete GAS setups from templates — character ability sets, attribute configurations, effect libraries, common gameplay patterns. Accessibility-focused infinite-duration GEs for reduced difficulty modes
+
+**MonolithUI (42 actions)**
+
+Widget Blueprint CRUD with a template system that scaffolds complete, functional UI. Pre-built templates for HUDs, main menus, settings screens, dialog boxes, loading screens, inventory grids, save/load menus, and toast notifications. Styling system for consistent theming. Widget animation support. Game-level scaffolding for settings, save systems, audio managers, input rebinding, and accessibility configurations. Built-in accessibility audit with colorblind modes and text scaling.
+
+**Optional Module System**
+
+- **MonolithBABridge** — Blueprint Assist integration via IModularFeatures bridge pattern. `auto_layout` action optionally delegates to BA's superior formatter when the marketplace plugin is installed. Compiles as empty shell when BA is absent — zero impact on users who don't own it.
+- **Conditional GBA support** — MonolithGAS detects the GBA (Blueprint Attributes) plugin at compile time. Blueprint AttributeSet creation requires GBA; all other 130 GAS actions work without it.
+- **`Build.cs` probe pattern** — Optional dependencies detected via `Directory.Exists()` at build time. `WITH_FOO=1` or `=0` preprocessor defines. No DLL load failures, no error dialogs. Full tutorial on [[Optional Modules]] wiki page.
+
+**Skills (+3)**
+
+- `unreal-mesh` — Mesh inspection, spatial queries, blockout, procedural geometry, horror/accessibility workflows
+- `unreal-ui` — Widget Blueprint CRUD, templates, styling, accessibility workflows
+- `unreal-gas` — Gameplay Ability System workflows: abilities, effects, attributes, ASC, tags, cues
+
+### Changed
+
+- **Total** — Action count 443 -> 815 (across 13 modules, exposed through 15 MCP tools)
+- **Skills** — 9 -> 12 Claude Code skills bundled with plugin
+- **Modules** — 10 -> 13 (added MonolithMesh, MonolithGAS, MonolithBABridge)
+
+### Fixed
+
+- SQLite multi-statement DDL was silently only executing the first statement, leaving source index schema incomplete (thanks @fp12 / ArcstoneGames)
+- Plugin path resolution now uses `IPluginManager` instead of hardcoded `Plugins/Monolith/` — works for nested install paths like `Plugins/Marketplace/Monolith/` (thanks @fp12 / ArcstoneGames)
+
+### Contributors
+
+Thanks to **@fp12** (ArcstoneGames) for two solid PRs this release — real bugs caught and clean fixes shipped.
+
 ## [0.10.0] - 2026-03-25
 
 Massive expansion across all modules: +153 actions (290 to 443). Niagara nearly doubles with 31 new actions and 10 bug fixes. Blueprint and Animation get major expansions. Material function suite rounds out the material pipeline.

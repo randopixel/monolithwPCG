@@ -85,6 +85,14 @@ public:
 	UPROPERTY(config, EditAnywhere, Category="Indexing|Deep Indexers")
 	bool bIndexDataAssets = true;
 
+	/** Enable Gameplay Ability System indexing (abilities, effects, attribute sets, cues) */
+	UPROPERTY(config, EditAnywhere, Category="Indexing|Deep Indexers")
+	bool bIndexGAS = true;
+
+	/** Enable AI asset indexing (behavior trees, blackboards, state trees, EQS, smart objects) */
+	UPROPERTY(config, EditAnywhere, Category="Indexing|Deep Indexers")
+	bool bIndexAI = true;
+
 	/** Enable dependency graph indexing */
 	UPROPERTY(config, EditAnywhere, Category="Indexing|Post-Pass Indexers")
 	bool bIndexDependencies = true;
@@ -112,6 +120,10 @@ public:
 	/** Enable gameplay tag indexing */
 	UPROPERTY(config, EditAnywhere, Category="Indexing|Post-Pass Indexers")
 	bool bIndexGameplayTags = true;
+
+	/** Enable mesh catalog indexing (bounds, size class, category for all StaticMesh assets) */
+	UPROPERTY(config, EditAnywhere, Category="Indexing|Post-Pass Indexers")
+	bool bIndexMeshCatalog = true;
 
 	/** Index content from enabled marketplace plugins (installed via Fab/Epic launcher) */
 	UPROPERTY(config, EditAnywhere, Category="Indexing")
@@ -148,6 +160,60 @@ public:
 
 	UPROPERTY(config, EditAnywhere, Category="Modules")
 	bool bEnableUI = true;
+
+	UPROPERTY(config, EditAnywhere, Category="Modules", DisplayName="Enable Mesh Module")
+	bool bEnableMesh = true;
+
+	// --- Optional Module Toggles ---
+
+	UPROPERTY(config, EditAnywhere, Category="Modules|Optional",
+		meta=(DisplayName="Enable Blueprint Assist Integration",
+			  ToolTip="When enabled and Blueprint Assist is installed, provides enhanced graph formatting via the IMonolithGraphFormatter bridge."))
+	bool bEnableBlueprintAssist = true;
+
+	UPROPERTY(config, EditAnywhere, Category="Modules|Optional",
+		meta=(DisplayName="Enable GAS Integration",
+			  ToolTip="When enabled, registers gas_query actions for Gameplay Ability System manipulation. Requires GameplayAbilities plugin (engine-bundled)."))
+	bool bEnableGAS = true;
+
+	UPROPERTY(config, EditAnywhere, Category="Modules|Optional",
+		meta=(DisplayName="Enable ComboGraph Integration",
+			  ToolTip="When enabled and ComboGraph is installed, registers combograph_query actions for combo graph manipulation."))
+	bool bEnableComboGraph = true;
+
+	UPROPERTY(config, EditAnywhere, Category="Modules|Optional",
+		meta=(DisplayName="Enable Logic Driver Integration",
+			  ToolTip="When enabled and Logic Driver Pro is installed, registers logicdriver_query actions for state machine manipulation."))
+	bool bEnableLogicDriver = true;
+
+	UPROPERTY(config, EditAnywhere, Category="Modules|Optional",
+		meta=(DisplayName="Enable AI Module",
+			  ToolTip="Registers ai_query actions for AI asset manipulation (BT, BB, ST, EQS, SO, Navigation, Perception)."))
+	bool bEnableAI = true;
+
+	// --- Modules|Mesh ---
+
+	UPROPERTY(config, EditAnywhere, Category="Modules|Mesh",
+		DisplayName="Enable Procedural Town Generation (Experimental)",
+		Meta=(EditCondition="bEnableMesh",
+			  ToolTip="Registers town gen actions (city blocks, buildings, facades, roofs, floor plans, furnishing, terrain, spatial registry, debug views). EXPERIMENTAL — known geometry issues. Disable to hide these actions from MCP."))
+	bool bEnableProceduralTownGen = false;
+
+	UPROPERTY(config, EditAnywhere, Category="Modules|Mesh", DisplayName="Handle Pool Timeout (seconds)",
+		Meta=(ClampMin="10.0", ClampMax="3600.0", EditCondition="bEnableMesh"))
+	float MeshHandleTimeoutSeconds = 300.0f;
+
+	UPROPERTY(config, EditAnywhere, Category="Modules|Mesh", DisplayName="Max Active Handles",
+		Meta=(ClampMin="1", ClampMax="256", EditCondition="bEnableMesh"))
+	int32 MaxActiveHandles = 32;
+
+	UPROPERTY(config, EditAnywhere, Category="Modules|Mesh", DisplayName="Default Size Match Tolerance %",
+		Meta=(ClampMin="1.0", ClampMax="100.0", EditCondition="bEnableMesh"))
+	float DefaultSizeMatchTolerance = 20.0f;
+
+	UPROPERTY(config, EditAnywhere, Category="Modules|Mesh", DisplayName="Surface Acoustics DataTable Path",
+		Meta=(EditCondition="bEnableMesh"))
+	FString SurfaceAcousticsTablePath = TEXT("/Game/Data/DT_SurfaceAcoustics");
 
 	// --- Logging ---
 
